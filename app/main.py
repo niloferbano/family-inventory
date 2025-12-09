@@ -1,0 +1,17 @@
+from fastapi import FastAPI
+import uvicorn
+from app.apis.users.router import router as users_router
+from app.apis.homes.router import router as homes_router
+
+app = FastAPI(title="Family-Inventory")
+app.include_router(router=users_router)
+app.include_router(router=homes_router)
+
+
+@app.get("/")
+async def read_root():
+    return {"message": "Hello from Family Inventory API!"}
+
+
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="127.0.0.1", port=5000, log_level="info")
