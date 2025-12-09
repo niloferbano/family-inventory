@@ -1,4 +1,3 @@
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.users.exceptions import InvalidCredentials
@@ -6,6 +5,7 @@ from app.apis.users.repository import UserRepository
 from app.iam.password_service import PasswordService
 from app.iam.schema import TokenResponse
 from app.iam.token_service import TokenService
+
 
 class AuthService:
     def __init__(self, session: AsyncSession):
@@ -16,7 +16,9 @@ class AuthService:
         if not user:
             raise InvalidCredentials()
 
-        if not PasswordService.verify(password=password, hashed_password=user.hashed_password):
+        if not PasswordService.verify(
+            password=password, hashed_password=user.hashed_password
+        ):
             raise InvalidCredentials()
 
         access_token = TokenService.create_access_token({"sub": str(user.id)})

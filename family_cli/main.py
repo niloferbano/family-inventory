@@ -1,6 +1,6 @@
 import typer
-from family_cli import reset_db, run
 
+from family_cli import reset_db, run
 
 app = typer.Typer(help="Family Inventory CLI")
 

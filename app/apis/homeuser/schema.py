@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from app.apis.homeuser.models import UserType
 
 
-
 class HomeUserBase(BaseModel):
     user_id: int
     home_id: int
@@ -18,6 +17,7 @@ class HomeUserCreate(HomeUserBase):
 class HomeUserRead(HomeUserBase):
     pass
 
+
 class HomeUserAddRequest(BaseModel):
     user_id: int
-    user_type: UserType 
+    user_type: UserType

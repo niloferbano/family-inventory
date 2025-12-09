@@ -1,4 +1,5 @@
 """Authentication service stubs for IAM."""
+
 from app.iam.password_service import PasswordService
 from app.iam.token_service import TokenService
 

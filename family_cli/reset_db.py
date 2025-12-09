@@ -5,7 +5,6 @@ import typer
 from app.core.configs.config import settings
 from app.core.database.session import get_db
 
-
 app = typer.Typer(help="Database commands")
 
 

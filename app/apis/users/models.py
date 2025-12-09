@@ -1,6 +1,6 @@
+from pydantic import EmailStr
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
-from pydantic import EmailStr
 
 from app.core.database.base import SQLBase, TimeStampMixin
 from app.iam.types import HashedString

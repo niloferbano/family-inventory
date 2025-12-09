@@ -1,10 +1,12 @@
 # app/apis/homeuser/models.py
 from enum import Enum
+
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Enum as SAEnum
 
 from app.core.database.base import SQLBase, TimeStampMixin
+
 
 class UserType(Enum):
     HOME_OWNER = "owner"
@@ -30,6 +32,4 @@ class HomeUser(SQLBase, TimeStampMixin):
         nullable=False,
     )
 
-    __table_args__ = (
-        PrimaryKeyConstraint("user_id", "home_id", name="pk_user_home"),
-    )
+    __table_args__ = (PrimaryKeyConstraint("user_id", "home_id", name="pk_user_home"),)

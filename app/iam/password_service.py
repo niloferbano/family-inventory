@@ -9,5 +9,5 @@ class PasswordService:
         return _hash(password)
 
     @staticmethod
-    def verify(password: str , hashed_password: HashedString) -> bool:
+    def verify(password: str, hashed_password: HashedString) -> bool:
         return _verify(password, hashed_password)

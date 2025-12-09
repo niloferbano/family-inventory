@@ -12,6 +12,7 @@ class ActivationModel(BaseModel):
 
 # --- Tests ---
 
+
 def test_valid_activation_key():
     value = "IevKSEhjoUQCb6iT0wmMSpiI1NprDZuEUtVDN7OC1N0"
     key = ActivationKey(value)

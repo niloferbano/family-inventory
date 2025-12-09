@@ -4,8 +4,10 @@ from app.core.configs.cache_config import CacheConfiguration
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://family_user:family_pass@localhost:5432/familyinventory"
-    
+    DATABASE_URL: str = (
+        "postgresql+asyncpg://family_user:family_pass@localhost:5432/familyinventory"
+    )
+
     DEBUG: bool = True
 
     # JWT
@@ -15,8 +17,8 @@ class Settings(BaseSettings):
     ACTIVATION_TOKEN_EXPIRE_MINUTES: int = 30
     HOST: str = "127.0.0.1"
     PORT: int = 8000
-    RELOAD: bool = True     # auto-reload only in dev
-    WORKERS: int = 1        # set >1 for production
+    RELOAD: bool = True  # auto-reload only in dev
+    WORKERS: int = 1  # set >1 for production
 
     # Redis
     CACHE: CacheConfiguration = CacheConfiguration()

@@ -1,14 +1,12 @@
 from functools import lru_cache
 from typing import AsyncGenerator, Type
+
 from fastapi import Depends
-from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import URL, text
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    create_async_engine,
-    async_sessionmaker,
-    AsyncSession,
-)
+from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
+                                    async_sessionmaker, create_async_engine)
+from sqlalchemy.orm import DeclarativeBase
+
 from app.core.configs.config import settings
 from app.core.database.base import SQLBase
 
@@ -59,6 +57,9 @@ class DBManager:
 
     def get_session(self):
         return self.sessionmaker()
+
+    def begin(self):
+        return self.sessionmaker.begin()
 
 
 @lru_cache

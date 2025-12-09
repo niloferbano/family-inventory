@@ -1,4 +1,5 @@
 from typing import Any, Optional
+
 from app.core.redis.client import redis_client
 
 
@@ -38,4 +39,3 @@ class RedisService:
     async def publish(channel: str, message: str) -> int:
         """Publish a message (future IoT use)."""
         return await redis_client.publish(channel, message)
-    

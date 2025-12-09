@@ -64,3 +64,5 @@ help:
 	@echo "Available commands:"
 	@awk -F':' '/^[a-zA-Z0-9_-]+:/ {print "  - " $$1}' Makefile
 	@echo ""
+install:
+	poetry install --no-root

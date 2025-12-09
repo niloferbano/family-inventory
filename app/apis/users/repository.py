@@ -1,9 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from .models import User
-from .queries import (
-    get_user_by_email_query,
-    count_active_users_query,
-)
+from .queries import count_active_users_query, get_user_by_email_query
 
 
 class UserRepository:

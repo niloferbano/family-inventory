@@ -1,6 +1,8 @@
 import typer
 import uvicorn
+
 from app.core.configs.config import settings
+
 app = typer.Typer(help="Run the Family Inventory server")
 
 

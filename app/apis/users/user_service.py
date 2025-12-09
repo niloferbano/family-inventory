@@ -1,8 +1,10 @@
+from sqlalchemy.exc import IntegrityError
 
-from app.apis.users.exceptions import UserAlreadyExists
+from app.apis.users.exceptions import UserAlreadyExists, UserNameAlreadyExists
 from app.apis.users.models import User as UserModel
 from app.apis.users.repository import UserRepository
-from app.apis.users.schema import  UserActivationRequest, UserRegisterResponse, UserBase
+from app.apis.users.schema import (UserActivationRequest, UserBase,
+                                   UserRegisterResponse)
 from app.iam.password_service import PasswordService
 from app.iam.token_service import TokenService
 from app.iam.types import ActivationKey
@@ -28,7 +30,7 @@ class UserService:
         repo = UserRepository(self.session)
 
         if await repo.get_by_email(user_base.email):
-            raise ValueError("User already activated")
+            raise UserAlreadyExists()
 
         user_model = UserModel(
             username=user_base.username,
@@ -38,17 +40,18 @@ class UserService:
             ),
             is_active=True,
         )
+        try:
+            return await repo.create(user_model)
+        except IntegrityError:
+            raise UserNameAlreadyExists()
 
-        return await repo.create(user_model)
-    async def register_user(self, user_data: UserBase)->UserRegisterResponse:
+    async def register_user(self, user_data: UserBase) -> UserRegisterResponse:
         user_repo = UserRepository(session=self.session)
-        
+
         if await user_repo.get_by_email(email=user_data.email):
             raise UserAlreadyExists()
         token = await TokenService.create_activation_token(user_data=user_data)
 
-        return UserRegisterResponse (
-            message="User created. Activate your account.",
-            activation_key=token
+        return UserRegisterResponse(
+            message="User created. Activate your account.", activation_key=token
         )
-        

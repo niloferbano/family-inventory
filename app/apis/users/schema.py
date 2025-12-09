@@ -1,9 +1,11 @@
 from datetime import datetime
-from pydantic import EmailStr, Field, SecretStr, ValidationInfo, field_validator
+
+from passlib.context import CryptContext
+from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
+                      field_validator)
 
 from app.iam.types import ActivationKey, HashedString
 from app.schemas_base.base import BaseApiSchema
-from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -22,7 +24,7 @@ class UserBase(BaseApiSchema):
     email: EmailStr
 
 
-class UserActivationRequest(UserBase):
+class UserActivationRequest(BaseApiSchema):
     password: SecretStr
     confirm_password: SecretStr
 
@@ -58,11 +60,13 @@ class UserRead(UserBase):
 class UserLogin(BaseApiSchema):
     email: EmailStr
     password: HashedString
-    
+
+
 class TokenResponse(BaseApiSchema):
     access_token: str
     token_type: str = "bearer"
-    
+
+
 class UserRegisterResponse(BaseApiSchema):
     message: str = "User created. Activate your account."
     activation_key: ActivationKey

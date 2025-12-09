@@ -1,4 +1,5 @@
 import re
+
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
 
@@ -10,7 +11,9 @@ class HashedString(str):
         return "HashedString(<hidden>)"
 
     @classmethod
-    def __get_pydantic_core_schema__(cls, source, handler: GetCoreSchemaHandler)-> CoreSchema:
+    def __get_pydantic_core_schema__(
+        cls, source, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
         # Accept any string and convert to HashedString
         return core_schema.no_info_plain_validator_function(cls.validate)
 
@@ -19,7 +22,7 @@ class HashedString(str):
         if not isinstance(value, str):
             raise TypeError("HashedString must be created from a string")
         return cls(value)
-    
+
 
 TOKEN_REGEX = re.compile(r"^[A-Za-z0-9_\-]{20,100}$")
 
@@ -41,10 +44,11 @@ class ActivationKey(str):
 
     def __repr__(self) -> str:
         return "ActivationKey(<hidden>)"
-    
+
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
+
     @classmethod
     def validate(cls, v):
         if not isinstance(v, str):

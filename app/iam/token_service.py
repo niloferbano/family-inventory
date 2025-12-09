@@ -1,8 +1,10 @@
-from datetime import datetime, timedelta, timezone
 import secrets
-from typing import Any
 import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
 from jose import jwt
+
 from app.apis.users.schema import UserBase
 from app.core.configs.config import settings
 from app.core.redis.service import RedisService
@@ -11,6 +13,7 @@ from app.iam.types import ActivationKey
 
 class TokenService:
     ACTIVATION_PREFIX = "activation"
+
     @staticmethod
     def create_access_token(data: dict[str, Any]) -> str:
         """
@@ -35,10 +38,13 @@ class TokenService:
             settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
         )
+
     @staticmethod
     def decode_token(token: str) -> dict:
-        return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-    
+        return jwt.decode(
+            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        )
+
     @staticmethod
     def generate_token() -> ActivationKey:
         """Create a secure random activation token."""
@@ -58,7 +64,7 @@ class TokenService:
 
     @classmethod
     async def verify_activation_token(cls, token: ActivationKey) -> str:
-        key = cls.ACTIVATION_PREFIX+ str(token)
+        key = cls.ACTIVATION_PREFIX + str(token)
 
         user_data = await RedisService.get(key)
         if not user_data:
