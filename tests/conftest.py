@@ -9,6 +9,7 @@ from app.apis.users.models import User
 from app.core.configs.config import settings
 from app.core.database.base import SQLBase
 from app.core.database.session import DBManager, get_db, get_session
+from app.iam.schema import JWTBasePayload
 from app.iam.token_service import TokenService
 from app.main import app
 
@@ -67,9 +68,16 @@ async def auth_headers(mock_db):
             is_active=True,
             is_admin=False,
         )
+
         session.add(user)
         await session.commit()
         await session.refresh(user)
 
-        token = TokenService.create_access_token({"sub": str(user.id)})
+        payload = JWTBasePayload(
+            user_id=str(user.id),
+            email=user.email,
+            is_admin=user.is_admin,
+        )
+
+        token = TokenService.create_access_token(payload)
         return {"Authorization": f"Bearer {token}"}

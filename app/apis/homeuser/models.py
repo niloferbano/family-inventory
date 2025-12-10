@@ -9,8 +9,8 @@ from app.core.database.base import SQLBase, TimeStampMixin
 
 
 class UserType(Enum):
-    HOME_OWNER = "owner"
-    HOME_RESIDENCE = "residence"
+    OWNER = "owner"
+    RESIDENCE = "residence"
     GUEST = "guest"
 
 

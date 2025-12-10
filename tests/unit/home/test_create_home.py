@@ -15,7 +15,7 @@ async def test_create_home_success(client, auth_headers, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_create_home_duplicate_name(client, auth_headers, mock_db):
+async def test_create_home_duplicate_name(client, auth_headers):
     payload = {"name": "My Home"}
 
     first = await client.post("/homes/", json=payload, headers=auth_headers)

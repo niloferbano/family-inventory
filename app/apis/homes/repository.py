@@ -7,6 +7,8 @@ from app.apis.homes.models import Home
 from app.apis.homes.queries import (query_get_home_by_id,
                                     query_get_home_by_name,
                                     query_get_home_for_user)
+from app.apis.homeuser.models import HomeUser, UserType
+from app.apis.users.models import User
 
 
 class HomeRepository:
@@ -42,3 +44,18 @@ class HomeRepository:
 
         stmt = select(Home).where(Home.id.in_(home_ids))
         return (await self.session.scalars(stmt)).all()
+
+    async def get_homes_with_members_for_owner(
+        self, home_ids: int
+    ) -> list[tuple[Home, User, UserType]]:
+
+        stmt = (
+            select(Home, User, HomeUser.user_type)
+            .join(HomeUser, Home.id == HomeUser.home_id)
+            .join(User, User.id == HomeUser.user_id)
+            .where(Home.id.in_(home_ids))
+            .order_by(Home.id, User.id)
+        )
+
+        result = await self.session.execute(stmt)
+        return result.all()

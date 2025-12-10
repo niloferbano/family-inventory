@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.homes.models import Home
 from app.apis.homes.repository import HomeRepository
-from app.apis.homes.schema import HomeCreate
+from app.apis.homes.schema import (GetHomesResponse,
+                                   GetHomeWithMembersResponse, HomeCreate)
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.users.models import User
 
@@ -34,8 +35,30 @@ class HomeService:
             raise PermissionError("You are not allowed to access this home")
         return home
 
-    async def get_all_homes_for_user(self) -> list[int]:
-        user_owned_home_ids = await self.home_user_repo.get_all_user_homes(
+    async def get_all_homes_for_user(self) -> list[GetHomeWithMembersResponse]:
+        user_owned_home_ids = await self.home_user_repo.get_home_ids_for_owner(
             self.current_user.id
         )
-        return user_owned_home_ids
+        if not user_owned_home_ids:
+            return []
+        result = await self.home_repo.get_homes_with_members_for_owner(
+            home_ids=user_owned_home_ids
+        )
+        homes_by_id: dict[int, GetHomeWithMembersResponse] = {}
+
+        for home, member_user, member_role in result:
+            if home.id not in homes_by_id:
+                homes_by_id[home.id] = GetHomeWithMembersResponse(
+                    id=home.id, name=home.name, members=[]
+                )
+
+            homes_by_id[home.id].members.append(
+                GetHomesResponse(
+                    id=member_user.id,
+                    username=member_user.username,
+                    email=member_user.email,
+                    role=member_role,
+                )
+            )
+
+        return list(homes_by_id.values())

@@ -2,7 +2,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+from jose import jwt
 
 from app.apis.users.schema import UserBase
 from app.core.configs.config import settings
@@ -37,15 +37,12 @@ class TokenService:
 
     @staticmethod
     def decode_token(token: str) -> JWTPayload:
-        try:
-            payload = jwt.decode(
-                token,
-                settings.JWT_SECRET_KEY,
-                algorithms=[settings.JWT_ALGORITHM],
-            )
-            return JWTPayload.model_validate(payload)
-        except JWTError as exc:
-            raise ValueError("Invalid or expired token") from exc
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+        return JWTPayload.model_validate(payload)
 
     @staticmethod
     def generate_token() -> ActivationKey:

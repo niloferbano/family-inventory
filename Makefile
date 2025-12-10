@@ -32,6 +32,9 @@ db-create:
 db-drop:
 	$(POETRY) run $(CLI) db drop
 
+create-admin:
+	$(POETRY) run $(CLI) user create-admin
+
 # ---------- TESTING ----------
 test:
 	PYTHONPATH=. $(POETRY) run pytest -q

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.apis.homes.exceptions import HomeAlreadyExists
-from app.apis.homes.schema import HomeCreate, HomeRead
+from app.apis.homes.schema import (GetHomeWithMembersResponse, HomeCreate,
+                                   HomeRead)
 from app.apis.homes.service import HomeService
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
@@ -37,7 +38,7 @@ async def get_home(
         return await service.get_home_for_user(home_id)
 
 
-@router.get("/", response_model=HomeRead)
+@router.get("/", response_model=list[GetHomeWithMembersResponse])
 async def get_homes(
     db_manager=Depends(get_db),
     user=Depends(get_current_user),
