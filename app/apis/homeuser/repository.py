@@ -33,6 +33,14 @@ class HomeUserRepository:
         stmt = sa.select(HomeUser).where(HomeUser.home_id == home_id)
         return (await self.session.scalars(stmt)).all()
 
+    async def get_all_user_homes(self, user_id: int):
+        stmt = sa.select(HomeUser.home_id).where(
+            sa.and_(
+                HomeUser.user_id == user_id, HomeUser.user_type == UserType.HOME_OWNER
+            )
+        )
+        return await self.session.scalars(stmt).all()
+
     async def user_has_access(self, user_id: int, home_id: int) -> bool:
         return bool(await self.get(user_id, home_id))
 

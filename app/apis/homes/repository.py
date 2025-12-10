@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,3 +35,10 @@ class HomeRepository:
         stmt = query_get_home_for_user(home_id, user_id, is_admin)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_all_homes(self, home_ids: list[int], is_admin: bool):
+        if is_admin:
+            return select(Home)
+
+        stmt = select(Home).where(Home.id.in_(home_ids))
+        return (await self.session.scalars(stmt)).all()

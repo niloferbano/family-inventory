@@ -20,7 +20,9 @@ def reset_db():
 
     async def _run():
         # Import all model modules to ensure metadata is populated before DDL
-        import app.apis.users.models  # noqa: F401
+        # import app.apis.users.models  # noqa: F401
+        # import app.apis.homes.models      # noqa
+        # import app.apis.homeuser.models  # noqa
 
         db = get_db()
         try:

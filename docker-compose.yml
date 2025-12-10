@@ -36,11 +36,11 @@ services:
     image: postgres:16
     container_name: family-test-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: testdb2
+      POSTGRES_USER: family_test
+      POSTGRES_PASSWORD: family_pass
+      POSTGRES_DB: family_test
     ports:
-      - "64217:5432"
+      - "5433:5432"
 
 volumes:
   pgdata:

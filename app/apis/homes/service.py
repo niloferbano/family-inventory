@@ -33,3 +33,9 @@ class HomeService:
         if not home:
             raise PermissionError("You are not allowed to access this home")
         return home
+
+    async def get_all_homes_for_user(self) -> list[int]:
+        user_owned_home_ids = await self.home_user_repo.get_all_user_homes(
+            self.current_user.id
+        )
+        return user_owned_home_ids

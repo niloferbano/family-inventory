@@ -35,3 +35,13 @@ async def get_home(
     async with db_manager.begin() as session:
         service = HomeService(session, user)
         return await service.get_home_for_user(home_id)
+
+
+@router.get("/", response_model=HomeRead)
+async def get_homes(
+    db_manager=Depends(get_db),
+    user=Depends(get_current_user),
+):
+    async with db_manager.begin() as session:
+        service = HomeService(session, user)
+        return await service.get_all_homes_for_user()

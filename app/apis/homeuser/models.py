@@ -2,7 +2,7 @@
 from enum import Enum
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, PrimaryKeyConstraint
+from sqlalchemy import ForeignKey, Index, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database.base import SQLBase, TimeStampMixin
@@ -32,4 +32,8 @@ class HomeUser(SQLBase, TimeStampMixin):
         nullable=False,
     )
 
-    __table_args__ = (PrimaryKeyConstraint("user_id", "home_id", name="pk_user_home"),)
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "home_id", name="pk_user_home"),
+        Index("ix_home_users_user_id", "user_id"),
+        Index("ix_home_users_home_id", "home_id"),
+    )
