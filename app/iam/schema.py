@@ -1,6 +1,4 @@
-from datetime import datetime
-
-from pydantic import EmailStr, Field
+from pydantic import EmailStr
 
 from app.schemas_base.base import BaseApiSchema
 
@@ -10,9 +8,13 @@ class TokenResponse(BaseApiSchema):
     token_type: str = "bearer"
 
 
-class JWTPayload(BaseApiSchema):
+class JWTBasePayload(BaseApiSchema):
+    user_id: str
+    email: EmailStr
+    is_admin: bool = False
 
-    user_id: str = Field(..., description="User ID")
-    email: EmailStr = Field(..., description="User email address")
-    is_admin: bool = Field(default=False, description="Platform-wide admin flag")
-    exp: datetime = Field(..., description="Token expiration timestamp")
+
+class JWTPayload(JWTBasePayload):
+    iat: int
+    exp: int
+    jti: str

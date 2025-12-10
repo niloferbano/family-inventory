@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 from app.apis.users.schema import UserBase
 from app.core.configs.config import settings
 from app.core.redis.service import RedisService
-from app.iam.schema import JWTPayload
+from app.iam.schema import JWTBasePayload, JWTPayload
 from app.iam.types import ActivationKey
 
 
@@ -15,7 +15,7 @@ class TokenService:
     ACTIVATION_PREFIX = "activation"
 
     @staticmethod
-    def create_access_token(data: JWTPayload) -> str:
+    def create_access_token(data: JWTBasePayload) -> str:
         now = datetime.now(timezone.utc)
 
         payload = {

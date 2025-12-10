@@ -28,7 +28,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user_id = payload.get("sub")
+    user_id = payload.user_id
     if not user_id:
         raise InvalidCredentials()
 

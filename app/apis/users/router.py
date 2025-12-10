@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.apis.users.auth_service import AuthService
 from app.apis.users.exceptions import UserAlreadyExists, UserNameAlreadyExists
-from app.apis.users.schema import (GetUserResponse, PaginatedUsersResponse,
+from app.apis.users.schema import (PaginatedUsersResponse,
                                    UserActivationRequest, UserBase, UserLogin,
                                    UserRegisterResponse)
 from app.apis.users.user_service import UserService
-from app.core.database.session import get_db
+from app.core.database.pagination import PaginationParams, get_pagination
+from app.core.database.session import DBManager, get_db
 from app.iam.dependencies import get_current_user
 from app.iam.permissions import PermissionsValidator
 from app.iam.schema import TokenResponse
@@ -71,21 +72,22 @@ async def login(payload: UserLogin, db_manager=Depends(get_db)):
 @router.get(
     "/",
     dependencies=[Depends(PermissionsValidator(require_admin=True))],
-    response_model=PaginatedUsersResponse[GetUserResponse],
+    response_model=PaginatedUsersResponse,
     summary="Get all users (Admin only)",
 )
 async def get_all_users(
-    db_manager=Depends(get_db),
-    limit: int = 20,
-    offset: int = 0,
+    request: Request,
+    pagination_params: PaginationParams = Depends(),
+    db_manager: DBManager = Depends(get_db),
 ):
-    async with db_manager.begin() as session:
-        user_service = UserService(session)
-        users, total = await user_service.get_all(limit=limit, offset=offset)
+    pagination = get_pagination(
+        page=pagination_params.page,
+        page_size=pagination_params.page_size,
+    )
 
-        return {
-            "items": users,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
+    async with db_manager.begin() as session:
+        service = UserService(session)
+        return await service.get_all_users(
+            pagination=pagination,
+            request_url=str(request.url),
+        )

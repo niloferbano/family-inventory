@@ -1,6 +1,8 @@
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
+
+from app.core.database.pagination import GenericT
 
 
 class BaseApiSchema(BaseModel):
@@ -15,8 +17,9 @@ class BaseApiSchema(BaseModel):
 T = TypeVar("T")
 
 
-class PaginatedOutput(BaseModel, Generic[T]):
-    total: int = Field(..., description="Total number of records")
-    limit: int = Field(..., description="Pagination limit")
-    offset: int = Field(..., description="Pagination offset")
-    results: list[T] = Field(..., description="Paginated results")
+class PaginatedOutput(BaseModel, Generic[GenericT]):
+    total: int
+    total_pages: int
+    next: str | None
+    previous: str | None
+    results: list[GenericT]

@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Generic
 
 from passlib.context import CryptContext
 from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
@@ -7,7 +6,6 @@ from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
 
 from app.iam.types import ActivationKey, HashedString
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput
-from app.schemas_base.protocols import OrmModelProtocolT
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -66,14 +64,8 @@ class GetUserResponse(UserBase):
     updated_at: datetime
 
 
-class PaginatedUsersResponse(
-    PaginatedOutput[GetUserResponse],
-    Generic[OrmModelProtocolT],
-):
-    results: list[GetUserResponse] = Field(
-        ...,
-        description="List of users.",
-    )
+class PaginatedUsersResponse(PaginatedOutput[GetUserResponse]):
+    pass
 
 
 class UserLogin(BaseApiSchema):
