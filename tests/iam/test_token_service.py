@@ -5,12 +5,8 @@ from pydantic import BaseModel
 from app.iam.types import ActivationKey
 
 
-# --- Helper Pydantic model for validation test ---
 class ActivationModel(BaseModel):
     key: ActivationKey
-
-
-# --- Tests ---
 
 
 def test_valid_activation_key():

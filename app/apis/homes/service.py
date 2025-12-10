@@ -20,7 +20,7 @@ class HomeService:
     async def create_home(self, data: HomeCreate) -> Home:
         home = await self.home_repo.create(Home(name=data.name))
         await self.home_user_repo.assign_owner(
-            home_id=home.id, user_id=self.curremt_user.id
+            home_id=home.id, user_id=self.current_user.id
         )
         return home
 

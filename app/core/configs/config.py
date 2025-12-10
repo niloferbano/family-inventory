@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     # Redis
     CACHE: CacheConfiguration = CacheConfiguration()
+    TEST_DATABASE_URL: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:64217/testdb2"
+    )
 
 
 settings = Settings()

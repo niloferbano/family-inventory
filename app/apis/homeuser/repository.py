@@ -25,7 +25,7 @@ class HomeUserRepository:
 
     async def get(self, user_id: int, home_id: int) -> HomeUser | None:
         stmt = sa.select(HomeUser).where(
-            (HomeUser.user_id == user_id) and (HomeUser.home_id == home_id)
+            sa.and_(HomeUser.user_id == user_id, HomeUser.home_id == home_id)
         )
         return await self.session.scalar(stmt)
 

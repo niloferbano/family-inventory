@@ -32,6 +32,15 @@ services:
       interval: 3s
       timeout: 3s
       retries: 5
+  postgres-test:
+    image: postgres:16
+    container_name: family-test-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: testdb2
+    ports:
+      - "64217:5432"
 
 volumes:
   pgdata:

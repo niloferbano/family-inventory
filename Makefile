@@ -34,7 +34,7 @@ db-drop:
 
 # ---------- TESTING ----------
 test:
-	$(POETRY) run pytest -q
+	PYTHONPATH=. $(POETRY) run pytest -q
 
 test-verbose:
 	$(POETRY) run pytest -vv
