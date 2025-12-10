@@ -14,7 +14,7 @@ class HomeUserRepository:
         link = HomeUser(
             user_id=user_id,
             home_id=home_id,
-            user_type=UserType.HOME_OWNER,
+            user_type=UserType.OWNER,
         )
         self.session.add(link)
 
@@ -33,6 +33,12 @@ class HomeUserRepository:
         stmt = sa.select(HomeUser).where(HomeUser.home_id == home_id)
         return (await self.session.scalars(stmt)).all()
 
+    async def get_all_user_homes(self, user_id: int):
+        stmt = sa.select(HomeUser.home_id).where(
+            sa.and_(HomeUser.user_id == user_id, HomeUser.user_type == UserType.OWNER)
+        )
+        return await self.session.scalars(stmt).all()
+
     async def user_has_access(self, user_id: int, home_id: int) -> bool:
         return bool(await self.get(user_id, home_id))
 
@@ -40,7 +46,15 @@ class HomeUserRepository:
         query = sa.select(HomeUser).where(
             HomeUser.user_id == user_id,
             HomeUser.home_id == home_id,
-            HomeUser.user_type == UserType.HOME_OWNER,
+            HomeUser.user_type == UserType.OWNER,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none() is not None
+
+    async def get_home_ids_for_owner(self, user_id: int) -> list[int]:
+        stmt = sa.select(HomeUser.home_id).where(
+            HomeUser.user_id == user_id,
+            HomeUser.user_type == UserType.OWNER,
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

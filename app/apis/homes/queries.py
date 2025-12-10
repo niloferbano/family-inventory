@@ -2,10 +2,6 @@ from sqlalchemy import select
 
 from app.apis.homes.models import Home
 
-# -------------------------------
-# Basic SELECT queries
-# -------------------------------
-
 
 def query_get_home_by_id(home_id: int):
     return select(Home).where(Home.id == home_id)

@@ -1,4 +1,8 @@
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel, ConfigDict
+
+from app.core.database.pagination import GenericT
 
 
 class BaseApiSchema(BaseModel):
@@ -8,3 +12,14 @@ class BaseApiSchema(BaseModel):
         extra="forbid",  # Forbid extra fields in input
         from_attributes=True,  # Enable ORM mode
     )
+
+
+T = TypeVar("T")
+
+
+class PaginatedOutput(BaseModel, Generic[GenericT]):
+    total: int
+    total_pages: int
+    next: str | None
+    previous: str | None
+    results: list[GenericT]

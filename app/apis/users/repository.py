@@ -1,3 +1,4 @@
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import User
@@ -17,6 +18,9 @@ class UserRepository:
 
     async def get_by_id(self, user_id: int) -> User | None:
         return await self.session.get(User, user_id)
+
+    def get_all_query(self) -> sa.Select:
+        return sa.select(User)
 
     # Query Object Pattern (Core)
     async def get_by_email(self, email: str) -> User | None:

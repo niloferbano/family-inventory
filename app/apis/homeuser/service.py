@@ -28,7 +28,7 @@ class HomeUserService:
         home_user = HomeUser(
             user_id=self.current_user.id,
             home_id=home_id,
-            user_type=UserType.HOME_OWNER,
+            user_type=UserType.OWNER,
         )
         return await self.repo.add(home_user)
 
@@ -39,7 +39,7 @@ class HomeUserService:
         user_type: UserType,
     ) -> HomeUserAddResponse:
 
-        if user_type == UserType.HOME_OWNER:
+        if user_type == UserType.OWNER:
             raise ValueError("Owners can only be created during home creation.")
         home = await self.home_repo.get_by_id(home_id=home_id)
         target_user = await self.user_repo.get_by_email(email=target_user_email)

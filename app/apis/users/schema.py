@@ -5,7 +5,7 @@ from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
                       field_validator)
 
 from app.iam.types import ActivationKey, HashedString
-from app.schemas_base.base import BaseApiSchema
+from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -55,6 +55,17 @@ class UserRead(UserBase):
     home_id: int | None
     created_at: datetime
     updated_at: datetime
+
+
+class GetUserResponse(UserBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PaginatedUsersResponse(PaginatedOutput[GetUserResponse]):
+    pass
 
 
 class UserLogin(BaseApiSchema):

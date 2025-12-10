@@ -44,6 +44,8 @@ class DBManager:
 
     async def drop_tables(self):
         async with self.engine.begin() as conn:
+            for table in reversed(self.model_base.metadata.sorted_tables):
+                await conn.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE'))
             await conn.run_sync(self.model_base.metadata.drop_all)
 
     async def truncate_tables(self):
