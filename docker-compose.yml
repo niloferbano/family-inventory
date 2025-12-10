@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: family-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: family_user
+      POSTGRES_PASSWORD: family_pass
+      POSTGRES_DB: familyinventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U family_user"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: family-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+  postgres-test:
+    image: postgres:16
+    container_name: family-test-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: testdb2
+    ports:
+      - "64217:5432"
+
+volumes:
+  pgdata:
+  redisdata:
