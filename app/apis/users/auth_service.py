@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.apis.users.exceptions import InvalidCredentials
 from app.apis.users.repository import UserRepository
 from app.iam.password_service import PasswordService
-from app.iam.schema import TokenResponse
+from app.iam.schema import JWTPayload, TokenResponse
 from app.iam.token_service import TokenService
 
 
@@ -20,6 +20,9 @@ class AuthService:
             password=password, hashed_password=user.hashed_password
         ):
             raise InvalidCredentials()
+        payload = JWTPayload(
+            user_id=str(user.id), is_admin=user.is_admin, email=user.email
+        )
 
-        access_token = TokenService.create_access_token({"sub": str(user.id)})
+        access_token = TokenService.create_access_token(payload)
         return TokenResponse(access_token=access_token)

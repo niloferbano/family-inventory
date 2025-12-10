@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.apis.users.auth_service import AuthService
 from app.apis.users.exceptions import UserAlreadyExists, UserNameAlreadyExists
-from app.apis.users.schema import (UserActivationRequest, UserBase, UserLogin,
+from app.apis.users.schema import (GetUserResponse, PaginatedUsersResponse,
+                                   UserActivationRequest, UserBase, UserLogin,
                                    UserRegisterResponse)
 from app.apis.users.user_service import UserService
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
+from app.iam.permissions import PermissionsValidator
 from app.iam.schema import TokenResponse
 from app.iam.types import ActivationKey
 
@@ -64,3 +66,26 @@ async def login(payload: UserLogin, db_manager=Depends(get_db)):
     async with db_manager.begin() as session:
         service = AuthService(session=session)
         return await service.login(payload.email, payload.password)
+
+
+@router.get(
+    "/",
+    dependencies=[Depends(PermissionsValidator(require_admin=True))],
+    response_model=PaginatedUsersResponse[GetUserResponse],
+    summary="Get all users (Admin only)",
+)
+async def get_all_users(
+    db_manager=Depends(get_db),
+    limit: int = 20,
+    offset: int = 0,
+):
+    async with db_manager.begin() as session:
+        user_service = UserService(session)
+        users, total = await user_service.get_all(limit=limit, offset=offset)
+
+        return {
+            "items": users,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
