@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import EmailStr, Field
 
@@ -16,19 +17,19 @@ class HomeCreate(HomeBase):
 
 
 class HomeRead(HomeBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: datetime
 
 
 class GetHomesResponse(BaseApiSchema):
-    id: int
+    id: UUID
     username: str
     email: EmailStr
     role: UserType
 
 
 class GetHomeWithMembersResponse(BaseApiSchema):
-    id: int
+    id: UUID
     name: str
     members: list[GetHomesResponse]

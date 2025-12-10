@@ -1,15 +1,17 @@
+from uuid import uuid4
+
 from pydantic import EmailStr
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database.base import SQLBase, TimeStampMixin
+from app.core.database.base import SQLBase, TimeStampMixin, UserId
 from app.iam.types import HashedString
 
 
 class User(SQLBase, TimeStampMixin):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[UserId] = mapped_column(primary_key=True, index=True, default=uuid4)
     username: Mapped[str] = mapped_column(
         String(50), unique=True, nullable=False, index=True
     )

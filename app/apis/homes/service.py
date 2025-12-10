@@ -8,6 +8,7 @@ from app.apis.homes.schema import (GetHomesResponse,
                                    GetHomeWithMembersResponse, HomeCreate)
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.users.models import User
+from app.core.database.base import HomeId
 
 
 class HomeService:
@@ -25,7 +26,7 @@ class HomeService:
         )
         return home
 
-    async def get_home_for_user(self, home_id: int):
+    async def get_home_for_user(self, home_id: HomeId):
         home = await self.home_repo.get_for_user(
             home_id=home_id,
             user_id=self.current_user.id,
@@ -44,7 +45,7 @@ class HomeService:
         result = await self.home_repo.get_homes_with_members_for_owner(
             home_ids=user_owned_home_ids
         )
-        homes_by_id: dict[int, GetHomeWithMembersResponse] = {}
+        homes_by_id: dict[HomeId, GetHomeWithMembersResponse] = {}
 
         for home, member_user, member_role in result:
             if home.id not in homes_by_id:

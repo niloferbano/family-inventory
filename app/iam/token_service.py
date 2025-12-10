@@ -19,7 +19,9 @@ class TokenService:
         now = datetime.now(timezone.utc)
 
         payload = {
-            **data.model_dump(),
+            "user_id": str(data.user_id),  # ✅ FORCE STRING
+            "email": data.email,
+            "is_admin": data.is_admin,
             "iat": int(now.timestamp()),
             "exp": int(
                 (

@@ -1,7 +1,12 @@
 from datetime import datetime
+from typing import NewType
+from uuid import UUID as PythonUUID
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+HomeId = NewType("HomeId", PythonUUID)
+UserId = NewType("UserId", PythonUUID)
 
 
 class SQLBase(DeclarativeBase):

@@ -1,6 +1,8 @@
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database.base import UserId
+
 from .models import User
 from .queries import count_active_users_query, get_user_by_email_query
 
@@ -16,7 +18,7 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
-    async def get_by_id(self, user_id: int) -> User | None:
+    async def get_by_id(self, user_id: UserId) -> User | None:
         return await self.session.get(User, user_id)
 
     def get_all_query(self) -> sa.Select:

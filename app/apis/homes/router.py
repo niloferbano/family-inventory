@@ -4,6 +4,7 @@ from app.apis.homes.exceptions import HomeAlreadyExists
 from app.apis.homes.schema import (GetHomeWithMembersResponse, HomeCreate,
                                    HomeRead)
 from app.apis.homes.service import HomeService
+from app.core.database.base import HomeId
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
 
@@ -29,7 +30,7 @@ async def create_home(
 
 @router.get("/{home_id}", response_model=HomeRead)
 async def get_home(
-    home_id: int,
+    home_id: HomeId,
     db_manager=Depends(get_db),
     user=Depends(get_current_user),
 ):

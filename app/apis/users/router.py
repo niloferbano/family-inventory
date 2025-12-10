@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.apis.users.auth_service import AuthService
-from app.apis.users.exceptions import UserAlreadyExists, UserNameAlreadyExists
+from app.apis.users.exceptions import (InvalidCredentials, UserAlreadyExists,
+                                       UserNameAlreadyExists)
 from app.apis.users.schema import (PaginatedUsersResponse,
                                    UserActivationRequest, UserBase, UserLogin,
                                    UserRegisterResponse)
@@ -66,7 +67,12 @@ async def activate_user(
 async def login(payload: UserLogin, db_manager=Depends(get_db)):
     async with db_manager.begin() as session:
         service = AuthService(session=session)
-        return await service.login(payload.email, payload.password)
+        try:
+            return await service.login(payload.email, payload.password)
+        except InvalidCredentials:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid credentials"
+            )
 
 
 @router.get(

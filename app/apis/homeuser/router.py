@@ -5,6 +5,7 @@ from app.apis.homeuser.exceptions import (AlreadyMemberException,
                                           TargetUserDoesnotExists)
 from app.apis.homeuser.schema import HomeUserAddRequest, HomeUserAddResponse
 from app.apis.homeuser.service import HomeUserService
+from app.core.database.base import HomeId
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/homeuser", tags=["Home User"])
 
 @router.post("/{home_id}/users", response_model=HomeUserAddResponse)
 async def add_user_to_home(
-    home_id: int,
+    home_id: HomeId,
     payload: HomeUserAddRequest,
     db_manager=Depends(get_db),
     current_user=Depends(get_current_user),
