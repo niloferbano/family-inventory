@@ -52,19 +52,19 @@ class HomeService:
         for home, member_user, member_role in result:
             if home.id not in homes_by_id:
                 homes_by_id[home.id] = GetHomeWithMembersResponse(
-                    id=home.id, name=home.name, members=[]
+                    home_id=home.id, name=home.name, members=[]
                 )
 
             homes_by_id[home.id].members.append(
                 GetHomesResponse(
-                    id=member_user.id,
+                    user_id=member_user.id,
                     username=member_user.username,
                     email=member_user.email,
-                    role=member_role,
+                    user_type=member_role,
                 )
             )
 
-            return list(homes_by_id.values())
+        return list(homes_by_id.values())
 
     async def get_all_homes_admin(
         self,
@@ -84,7 +84,7 @@ class HomeService:
             user_id,
             username,
             email,
-            role,
+            user_type,
         ) in rows:
             if home_id not in homes:
                 homes[home_id] = GetHomeWithMembersResponse(
@@ -100,7 +100,7 @@ class HomeService:
                     user_id=user_id,
                     username=username,
                     email=email,
-                    role=role.value,
+                    user_type=user_type.value,
                 )
             )
 

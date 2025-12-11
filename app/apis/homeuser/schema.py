@@ -1,7 +1,7 @@
 # app/apis/homeuser/schema.py
 import uuid
 
-from pydantic import BaseModel, EmailStr
+from pydantic import EmailStr
 
 from app.apis.homeuser.models import UserType
 from app.schemas_base.base import BaseApiSchema
@@ -23,6 +23,10 @@ class HomeUserAddResponse(BaseApiSchema):
     user_type: UserType
 
 
-class HomeUserAddRequest(BaseModel):
+class HomeUserAddRequest(BaseApiSchema):
     user_email: EmailStr
+    user_type: UserType
+
+
+class ChangeHomeUserRoleRequest(BaseApiSchema):
     user_type: UserType

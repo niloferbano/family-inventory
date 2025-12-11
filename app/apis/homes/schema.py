@@ -26,15 +26,13 @@ class GetHomesResponse(BaseApiSchema):
     user_id: UUID
     username: str
     email: EmailStr
-    role: UserType
+    user_type: UserType
 
 
 class GetHomeWithMembersResponse(BaseApiSchema):
     home_id: UUID
     name: str
     members: list[GetHomesResponse]
-    created_at: datetime
-    updated_at: datetime
 
 
 class PaginatedAdminHomesResponse(PaginatedOutput[GetHomesResponse]):

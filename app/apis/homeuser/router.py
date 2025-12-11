@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.apis.homeuser.exceptions import (AlreadyMemberException,
                                           TargetUserDoesnotExists)
-from app.apis.homeuser.schema import HomeUserAddRequest, HomeUserAddResponse
+from app.apis.homeuser.schema import (ChangeHomeUserRoleRequest,
+                                      HomeUserAddRequest, HomeUserAddResponse)
 from app.apis.homeuser.service import HomeUserService
 from app.core.database.base import HomeId
 from app.core.database.session import get_db
@@ -31,3 +32,19 @@ async def add_user_to_home(
             raise HTTPException(status_code=exec.status_code, detail=exec.detail)
         except TargetUserDoesnotExists as exec:
             raise HTTPException(status_code=exec.status_code, detail=exec.detail)
+
+
+@router.patch(
+    "/{home_id}/users/{user_id}",
+    summary="Change a user's role in a home",
+)
+async def change_user_role(
+    home_id: HomeId,
+    user_id: int,
+    payload: ChangeHomeUserRoleRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    async with db.begin() as session:
+        service = HomeUserService(session, current_user)
+        return await service.change_user_role(home_id, user_id, payload.role)
