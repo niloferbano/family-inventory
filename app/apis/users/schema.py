@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from passlib.context import CryptContext
 from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
@@ -47,18 +48,17 @@ class UserActivationRequest(BaseApiSchema):
 
 
 class UserRead(UserBase):
-    id: int
+    id: UUID
     username: str
     email: EmailStr
     is_active: bool
     is_admin: bool
-    home_id: int | None
     created_at: datetime
     updated_at: datetime
 
 
 class GetUserResponse(UserBase):
-    id: int
+    id: UUID
     is_active: bool
     created_at: datetime
     updated_at: datetime

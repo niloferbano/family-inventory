@@ -1,9 +1,10 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import EmailStr, Field
 
 from app.apis.homeuser.models import UserType
-from app.schemas_base.base import BaseApiSchema
+from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
 
 class HomeBase(BaseApiSchema):
@@ -16,19 +17,23 @@ class HomeCreate(HomeBase):
 
 
 class HomeRead(HomeBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: datetime
 
 
 class GetHomesResponse(BaseApiSchema):
-    id: int
+    user_id: UUID
     username: str
     email: EmailStr
-    role: UserType
+    user_type: UserType
 
 
 class GetHomeWithMembersResponse(BaseApiSchema):
-    id: int
+    home_id: UUID
     name: str
     members: list[GetHomesResponse]
+
+
+class PaginatedAdminHomesResponse(PaginatedOutput[GetHomesResponse]):
+    results: list[GetHomeWithMembersResponse]

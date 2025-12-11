@@ -5,7 +5,7 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database.base import SQLBase, TimeStampMixin
+from app.core.database.base import HomeId, SQLBase, TimeStampMixin, UserId
 
 
 class UserType(Enum):
@@ -17,12 +17,12 @@ class UserType(Enum):
 class HomeUser(SQLBase, TimeStampMixin):
     __tablename__ = "home_users"
 
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[UserId] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
 
-    home_id: Mapped[int] = mapped_column(
+    home_id: Mapped[HomeId] = mapped_column(
         ForeignKey("homes.id", ondelete="CASCADE"),
         nullable=False,
     )

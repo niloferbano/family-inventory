@@ -10,6 +10,7 @@ from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.homeuser.schema import HomeUserAddResponse
 from app.apis.users.models import User
 from app.apis.users.repository import UserRepository
+from app.core.database.base import HomeId
 
 
 class HomeUserService:
@@ -20,7 +21,7 @@ class HomeUserService:
         self.home_repo = HomeRepository(session)
         self.current_user = current_user
 
-    async def create_owner_for_home(self, home_id: int) -> HomeUser:
+    async def create_owner_for_home(self, home_id: HomeId) -> HomeUser:
         existing = await self.repo.get(self.current_user.id, home_id)
         if existing:
             return existing
@@ -34,7 +35,7 @@ class HomeUserService:
 
     async def add_user_to_home(
         self,
-        home_id: int,
+        home_id: HomeId,
         target_user_email: EmailStr,
         user_type: UserType,
     ) -> HomeUserAddResponse:
@@ -66,5 +67,5 @@ class HomeUserService:
             username=target_user.username, home_name=home.name, user_type=user_type
         )
 
-    async def user_can_access(self, user_id: int, home_id: int) -> bool:
+    async def user_can_access(self, user_id: int, home_id: HomeId) -> bool:
         return await self.repo.user_has_access(user_id, home_id)

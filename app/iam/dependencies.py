@@ -4,6 +4,7 @@ from jose import ExpiredSignatureError, JWTError
 
 from app.apis.users.exceptions import InvalidCredentials
 from app.apis.users.repository import UserRepository
+from app.core.database.base import UserId
 from app.core.database.session import get_session
 from app.iam.token_service import TokenService
 
@@ -33,7 +34,7 @@ async def get_current_user(
         raise InvalidCredentials()
 
     user_repo = UserRepository(session)
-    user = await user_repo.get_by_id(int(user_id))
+    user = await user_repo.get_by_id(UserId(user_id))
 
     if not user:
         raise InvalidCredentials()
