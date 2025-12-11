@@ -18,7 +18,7 @@ T = TypeVar("T")
 
 
 class PaginatedOutput(BaseModel, Generic[GenericT]):
-    total: int
+    count: int
     total_pages: int
     next: str | None
     previous: str | None

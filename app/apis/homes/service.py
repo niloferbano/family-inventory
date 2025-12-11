@@ -1,14 +1,16 @@
-# app/apis/homes/service.py
+from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.homes.models import Home
 from app.apis.homes.repository import HomeRepository
 from app.apis.homes.schema import (GetHomesResponse,
-                                   GetHomeWithMembersResponse, HomeCreate)
+                                   GetHomeWithMembersResponse, HomeCreate,
+                                   PaginatedAdminHomesResponse)
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.users.models import User
 from app.core.database.base import HomeId
+from app.core.database.pagination import Page, update_pagination
 
 
 class HomeService:
@@ -62,4 +64,64 @@ class HomeService:
                 )
             )
 
-        return list(homes_by_id.values())
+            return list(homes_by_id.values())
+
+    async def get_all_homes_admin(
+        self,
+        pagination: Page,
+        request_url: str,
+    ) -> PaginatedAdminHomesResponse:
+
+        rows, total = await self.home_repo.get_all_homes_with_members(pagination)
+
+        homes: dict[HomeId, GetHomeWithMembersResponse] = {}
+
+        for (
+            home_id,
+            name,
+            created_at,
+            updated_at,
+            user_id,
+            username,
+            email,
+            role,
+        ) in rows:
+            if home_id not in homes:
+                homes[home_id] = GetHomeWithMembersResponse(
+                    home_id=home_id,
+                    name=name,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    members=[],
+                )
+
+            homes[home_id].members.append(
+                GetHomesResponse(
+                    user_id=user_id,
+                    username=username,
+                    email=email,
+                    role=role.value,
+                )
+            )
+
+        total_pages = ceil(total / pagination.page_size)
+
+        next_url = (
+            update_pagination(request_url, pagination.page + 1, pagination.page_size)
+            if pagination.page < total_pages
+            else None
+        )
+
+        prev_url = (
+            update_pagination(request_url, pagination.page - 1, pagination.page_size)
+            if pagination.page > 1
+            else None
+        )
+
+        return PaginatedAdminHomesResponse(
+            count=total,
+            total_pages=total_pages,
+            next=next_url,
+            previous=prev_url,
+            results=list(homes.values()),
+        )

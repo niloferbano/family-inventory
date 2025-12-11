@@ -83,7 +83,7 @@ async def login(payload: UserLogin, db_manager=Depends(get_db)):
 )
 async def get_all_users(
     request: Request,
-    pagination_params: PaginationParams = Depends(),
+    pagination_params: PaginationParams,
     db_manager: DBManager = Depends(get_db),
 ):
     pagination = get_pagination(

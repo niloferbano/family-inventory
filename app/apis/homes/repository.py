@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.apis.homes.queries import (query_get_home_by_id,
 from app.apis.homeuser.models import HomeUser, UserType
 from app.apis.users.models import User
 from app.core.database.base import HomeId, UserId
+from app.core.database.pagination import Page
 
 
 class HomeRepository:
@@ -60,3 +61,35 @@ class HomeRepository:
 
         result = await self.session.execute(stmt)
         return result.all()
+
+    async def get_all_homes_with_members(
+        self, pagination: Page
+    ) -> list[tuple[Home, User, UserType]]:
+        limit, offset = pagination.to_limit()
+
+        base_query = (
+            select(
+                Home.id,
+                Home.name,
+                Home.created_at,
+                Home.updated_at,
+                User.id,
+                User.username,
+                User.email,
+                HomeUser.user_type,
+            )
+            .select_from(Home)
+            .join(HomeUser, Home.id == HomeUser.home_id)
+            .join(User, User.id == HomeUser.user_id)
+        )
+
+        count_query = select(func.count()).select_from(Home)
+        total = (await self.session.execute(count_query)).scalar() or 0
+
+        paginated_query = (
+            base_query.order_by(Home.created_at.desc()).limit(limit).offset(offset)
+        )
+
+        rows = (await self.session.execute(paginated_query)).all()
+
+        return rows, total

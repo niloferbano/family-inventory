@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.apis.homes.exceptions import HomeAlreadyExists
 from app.apis.homes.schema import (GetHomeWithMembersResponse, HomeCreate,
-                                   HomeRead)
+                                   HomeRead, PaginatedAdminHomesResponse)
 from app.apis.homes.service import HomeService
 from app.core.database.base import HomeId
+from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
+from app.iam.permissions import PermissionsValidator
 
 router = APIRouter(prefix="/homes", tags=["homes"])
 
@@ -47,3 +49,26 @@ async def get_homes(
     async with db_manager.begin() as session:
         service = HomeService(session, user)
         return await service.get_all_homes_for_user()
+
+
+@router.get(
+    "/admin/homes",
+    dependencies=[Depends(PermissionsValidator(require_admin=True))],
+    response_model=PaginatedAdminHomesResponse,
+    summary="Admin: Get all homes with members",
+)
+async def admin_get_all_homes(
+    request: Request,
+    pagination_params: PaginationParams = Depends(),
+    db_manager=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    pagination = get_pagination(
+        page=pagination_params.page,
+        page_size=pagination_params.page_size,
+    )
+    async with db_manager.begin() as session:
+        service = HomeService(session, current_user=current_user)
+        return await service.get_all_homes_admin(
+            pagination=pagination, request_url=str(request.url)
+        )

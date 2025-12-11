@@ -1,7 +1,7 @@
 import math
 from enum import StrEnum, auto
-from typing import (Annotated, Any, Generic, Literal, Protocol, Type,
-                    TypeAlias, TypeVar)
+from typing import (Annotated, Any, Generic, Literal, Protocol, TypeAlias,
+                    TypeVar)
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import annotated_types
@@ -124,106 +124,47 @@ def update_pagination(url: str, page: int, page_size: int) -> str:
 
 
 async def apply_pagination(
-    query: sa.Select[AnyTuple],
+    *,
+    query: sa.Select,
     session: AsyncSession,
-    sort_by: FieldT,
     pagination: Page,
+    sort_by: InstrumentedAttribute,
     base_url: str,
-    row_model: Type[OrmModelProtocolT],
-    paginated_output_model: Type[PaginatedType] = PaginatedOutput,
-    extra_col_label: str = "__total_count",
+    row_model: type[OrmModelProtocolT],
+    paginated_output_model: type[PaginatedType],
     sort_mode: Literal["asc", "desc"] = "desc",
 ) -> PaginatedType:
-    """
-    Apply pagination to the query, execute it and return the list of rows returned by the query.
-    Also get the total count of that query which is useful to show to the client.
+    limit, offset = pagination.to_limit()
 
-    Automatically removes the extra column it adds to the query result.
+    count_query = sa.select(func.count()).select_from(query.subquery())
+    total_count = (await session.execute(count_query)).scalar() or 0
 
-
-    Usage:
-    from fastapi import Request
-    from smartlane_utils.sqla import get_pagination
-
-    @router.get(
-    "/",
-    response_model=PaginatedOutput,
-    )
-    async def get_or_create_postal_codes(
-        request: Request,
-        page: int = DEFAULT_PAGE,
-        page_size: int = DEFAULT_PER_PAGE,
-    ) -> PaginatedOutput: ...
-
-    class GetModel(BaseModel):
-          name: str
-
-          @classmethod
-          def from_orm(cls, instance: OrmModel) -> BaseModel:
-            return GetModel(**instance)
-
-    pagination = get_pagination(page_size=page_size, page=page)
-    results = await apply_pagination(
-        query=query, session=session, sort_by=PostalCode.id, pagination=pagination, base_url=str(request.url),
-          pydantic_model=GetModel
-    )
-    """
-    original_query = query
-    limit, skip = pagination.to_limit()
     query = query.order_by(sort_by.desc() if sort_mode == "desc" else sort_by.asc())
-    query = query.add_columns(sa.func.count().over().label(extra_col_label))
 
-    if limit is not None:
-        query = query.limit(limit)
-    if skip is not None:
-        query = query.offset(skip)
+    query = query.limit(limit).offset(offset)
 
-    result = (await session.execute(query)).all()
-    if result != []:
-        total_size = result[0].tuple()[-1] if result else 0
-        total_pages = math.ceil(total_size / pagination.page_size)
+    result = (await session.execute(query)).scalars().all()
 
-        next_url = (
-            update_pagination(base_url, pagination.page + 1, pagination.page_size)
-            if pagination.page < total_pages
-            else None
-        )
-        prev_url = (
-            update_pagination(base_url, pagination.page - 1, pagination.page_size)
-            if pagination.page > 1
-            else None
-        )
-    else:
-        count_query = sa.select(func.count()).select_from(original_query.subquery())
+    total_pages = math.ceil(total_count / pagination.page_size)
 
-        total_size = (await session.execute(count_query)).scalar() or 0
-        total_pages = math.ceil(total_size / pagination.page_size)
-        next_url = (
-            update_pagination(base_url, pagination.page + 1, pagination.page_size)
-            if pagination.page < total_pages
-            else None
-        )
-        if total_size == 0:
-            prev_url = None
-        elif pagination.page > total_pages:
-            prev_url = update_pagination(base_url, total_pages, pagination.page_size)
-        elif pagination.page > 1:
-            prev_url = update_pagination(
-                base_url, pagination.page - 1, pagination.page_size
-            )
-        else:
-            prev_url = None
+    next_url = (
+        update_pagination(base_url, pagination.page + 1, pagination.page_size)
+        if pagination.page < total_pages
+        else None
+    )
 
-    result = [
-        row_model.from_orm(row[0] if len(row) == 1 else row) for *row, _ in result
-    ]
+    previous_url = (
+        update_pagination(base_url, pagination.page - 1, pagination.page_size)
+        if pagination.page > 1
+        else None
+    )
 
     return paginated_output_model(
-        total=total_size,
-        next=next_url,
-        previous=prev_url,
-        results=result,
+        count=total_count,
         total_pages=total_pages,
+        next=next_url,
+        previous=previous_url,
+        results=[row_model.from_orm(row) for row in result],
     )
 
 
