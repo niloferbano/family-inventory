@@ -24,6 +24,8 @@ typer = "0.20.0"
 redis = "^7.1.0"
 ruff = "^0.14.7"
 httpx = "^0.28.1"
+alembic = "^1.17.2"
+psycopg2-binary = "^2.9.11"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2"

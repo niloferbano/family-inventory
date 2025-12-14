@@ -7,6 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 HomeId = NewType("HomeId", PythonUUID)
 UserId = NewType("UserId", PythonUUID)
+InventoryId = NewType("InventoryId", PythonUUID)
 
 
 class SQLBase(DeclarativeBase):

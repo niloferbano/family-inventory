@@ -1,26 +1,51 @@
-# app/apis/homeuser/exceptions.py
-from fastapi import HTTPException, status
+from app.apis.homeuser.models import UserType
+from app.core.database.error_codes import ErrorCode
+from app.core.database.exceptions import (
+    DomainConflictError,
+    DomainNotFoundError,
+    DomainPermissionError,
+)
 
 
-class AlreadyMemberException(HTTPException):
-    def __init__(self):
+class AlreadyMemberException(DomainConflictError):
+    def __init__(self, home_id, user_id):
         super().__init__(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already assigned to this home.",
+            code=ErrorCode.HOME_USER_ALREADY_MEMBER,
+            message="User is already a member of this home",
+            details={
+                "home_id": str(home_id),
+                "user_id": user_id,
+            },
         )
 
 
-class ForbiddenHomeAccess(HTTPException):
-    def __init__(self):
+class TargetUserDoesNotExist(DomainNotFoundError):
+    def __init__(self, email: str):
         super().__init__(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to access this home.",
+            code=ErrorCode.TARGET_USER_NOT_FOUND,
+            message="Target user does not exist",
+            details={"email": email},
         )
 
 
-class TargetUserDoesnotExists(HTTPException):
+class OwnerAssignmentNotAllowed(DomainConflictError):
     def __init__(self):
         super().__init__(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Target user doesn't exist",
+            code=ErrorCode.OWNER_ASSIGNMENT_NOT_ALLOWED,
+            message="Owners can only be assigned during home creation",
+            details={
+                "allowed_roles": [
+                    UserType.RESIDENCE.value,
+                    UserType.GUEST.value,
+                ]
+            },
+        )
+
+
+class HomePermissionDenied(DomainPermissionError):
+    def __init__(self, home_id):
+        super().__init__(
+            code=ErrorCode.HOME_PERMISSION_DENIED,
+            message="You are not allowed to access this home",
+            details={"home_id": str(home_id)},
         )
