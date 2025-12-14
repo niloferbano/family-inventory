@@ -1,5 +1,6 @@
 # app/core/database/exceptions.py
 from typing import Any
+
 from app.core.database.error_codes import ErrorCode
 
 

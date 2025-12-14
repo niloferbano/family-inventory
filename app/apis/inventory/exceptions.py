@@ -10,3 +10,12 @@ class InventoryItemNameConflict(DomainConflictError):
             message="One or more inventory items already exist in this home",
             details={"names": names},
         )
+
+
+class InventoryAccessDenied(DomainConflictError):
+    def __init__(self, home_id: str):
+        super().__init__(
+            code=ErrorCode.INVENTORY_ACCESS_DENIED,
+            message="You are not allowed to access this inventory.",
+            details={"home_id": home_id},
+        )

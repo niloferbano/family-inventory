@@ -1,8 +1,11 @@
+from datetime import date, timedelta
+
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.inventory.exceptions import InventoryItemNameConflict
 from app.apis.inventory.models import InventoryItem
+from app.apis.inventory.schema import ExpiryFilter
 from app.core.database.base import HomeId
 from app.core.database.pagination import Page
 
@@ -39,9 +42,31 @@ class InventoryRepository:
         await self.session.flush()
         return items
 
-    async def get_by_home(self, home_id, pagination: Page):
+    async def get_by_home(
+        self,
+        home_id,
+        pagination: Page,
+        expiry: ExpiryFilter | None = None,
+        days: int = 7,
+    ):
+        today = date.today()
+        limit, offset = pagination.to_limit()
         limit, offset = pagination.to_limit()
         base_query = sa.select(InventoryItem).where(InventoryItem.home_id == home_id)
+        if expiry == ExpiryFilter.EXPIRED:
+            base_query = base_query.where(
+                InventoryItem.expiry_date.isnot(None),
+                InventoryItem.expiry_date < today,
+            )
+
+        elif expiry == ExpiryFilter.EXPIRING_SOON:
+            base_query = base_query.where(
+                InventoryItem.expiry_date.isnot(None),
+                InventoryItem.expiry_date.between(
+                    today,
+                    today + timedelta(days=days),
+                ),
+            )
         count_query = (
             sa.select(sa.func.count())
             .select_from(InventoryItem)

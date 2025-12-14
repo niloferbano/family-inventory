@@ -4,7 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.apis.homeuser.repository import HomeUserRepository
-from app.apis.inventory.exceptions import InventoryItemNameConflict
+from app.apis.inventory.exceptions import (InventoryAccessDenied,
+                                           InventoryItemNameConflict)
 from app.apis.inventory.models import InventoryItem
 from app.apis.inventory.repository import InventoryRepository
 from app.apis.inventory.schema import (InventoryCreateRequest,
@@ -12,8 +13,6 @@ from app.apis.inventory.schema import (InventoryCreateRequest,
                                        InventoryGetResponse,
                                        PaginatedInventorytItemResponse)
 from app.core.database.base import HomeId
-from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import DomainPermissionError
 from app.core.database.pagination import Page, update_pagination
 
 
@@ -51,19 +50,20 @@ class InventoryService:
             raise InventoryItemNameConflict(existing)
 
     async def get_items(
-        self, home_id, pagination: Page, request_url: str
+        self, home_id, pagination: Page, request_url: str, expiry=None, days=7
     ) -> PaginatedInventorytItemResponse:
         if not await self.home_user_repo.user_has_access(
             user_id=self.current_user.id,
             home_id=home_id,
         ):
-            raise DomainPermissionError(
-                code=ErrorCode.HOME_PERMISSION_DENIED,
-                message="You are not allowed to access this home",
-                details={"home_id": str(home_id)},
+            raise InventoryAccessDenied(
+                home_id=str(home_id),
             )
         rows, total = await self.inventory_repo.get_by_home(
-            home_id, pagination=pagination
+            home_id,
+            pagination=pagination,
+            expiry=expiry,
+            days=days,
         )
         total_pages = ceil(total / pagination.page_size)
 

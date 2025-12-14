@@ -1,4 +1,5 @@
 from datetime import date
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -40,3 +41,13 @@ class InventoryGetResponse(BaseApiSchema):
 
 class PaginatedInventorytItemResponse(PaginatedOutput[InventoryGetResponse]):
     results: list[InventoryGetResponse]
+
+
+class ExpiryFilter(StrEnum):
+    EXPIRED = "expired"
+    EXPIRING_SOON = "expiring_soon"
+
+
+class InventoryQueryParams(BaseModel):
+    expiry: ExpiryFilter | None = None
+    days: int = 7
