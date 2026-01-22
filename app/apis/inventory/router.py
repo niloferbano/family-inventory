@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.apis.errors.errors import ErrorResponse
 from app.apis.inventory.schema import (ExpiryFilter, InventoryCreateRequest,
                                        InventoryCreateResponse,
-                                       PaginatedInventorytItemResponse)
+                                       InventoryFilters,
+                                       PaginatedInventoryItemResponse)
 from app.apis.inventory.service import InventoryService
+from app.apis.inventory.types import InventoryCategory
 from app.core.database.base import HomeId
 from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import get_db
@@ -27,7 +29,7 @@ async def add_inventory_item(
 
 @router.get(
     "/{home_id}",
-    response_model=PaginatedInventorytItemResponse,
+    response_model=PaginatedInventoryItemResponse,
     responses={
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
@@ -37,9 +39,10 @@ async def add_inventory_item(
 async def list_inventory_items(
     home_id: HomeId,
     request: Request,
-    expiry: ExpiryFilter | None = None,
-    days: int = 7,
     pagination_params: PaginationParams = Depends(),
+    expiry: ExpiryFilter | None = Query(default=None),
+    days: int = Query(default=7, ge=1, le=365),
+    category: list[InventoryCategory] | None = Query(default=None),
     db_manager=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -47,18 +50,22 @@ async def list_inventory_items(
         page=pagination_params.page,
         page_size=pagination_params.page_size,
     )
+    filters = InventoryFilters(
+        category=category,
+        expiry=expiry,
+        days=days,
+    )
     async with db_manager.begin() as session:
         service = InventoryService(session, current_user)
         try:
             return await service.get_items(
                 home_id=home_id,
                 pagination=pagination,
-                request_url=request.url,
-                expiry=expiry,
-                days=days,
+                request_url=str(request.url),
+                filters=filters,
             )
         except PermissionError:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="User doesn't have access",
             )

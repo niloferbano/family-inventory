@@ -19,7 +19,7 @@ from app.core.database.base import HomeId
 class HomeUserService:
 
     def __init__(self, session: AsyncSession, current_user: User):
-        self.repo = HomeUserRepository(session)
+        self.home_user_repo = HomeUserRepository(session)
         self.user_repo = UserRepository(session)
         self.home_repo = HomeRepository(session)
         self.current_user = current_user
@@ -55,7 +55,9 @@ class HomeUserService:
         if not target_user:
             raise TargetUserDoesNotExist(target_user_email)
 
-        is_owner = await self.repo.user_is_owner(self.current_user.id, home_id)
+        is_owner = await self.home_user_repo.user_is_owner(
+            self.current_user.id, home_id
+        )
 
         if not (self.current_user.is_admin or is_owner):
             raise HomePermissionDenied(home_id=home_id)
@@ -66,9 +68,8 @@ class HomeUserService:
             user_type=user_type,
         )
         try:
-            await self.repo.add(home_user)
+            await self.home_user_repo.add(home_user)
         except IntegrityError as exc:
-            await self.session.rollback()
             raise AlreadyMemberException(home_id, target_user.id) from exc
 
         return HomeUserAddResponse(
@@ -78,4 +79,4 @@ class HomeUserService:
         )
 
     async def user_can_access(self, user_id: int, home_id: HomeId) -> bool:
-        return await self.repo.user_has_access(user_id, home_id)
+        return await self.home_user_repo.user_has_access(user_id, home_id)

@@ -19,7 +19,7 @@ class TokenService:
         now = datetime.now(timezone.utc)
 
         payload = {
-            "user_id": str(data.user_id),  # ✅ FORCE STRING
+            "user_id": str(data.user_id),
             "email": data.email,
             "is_admin": data.is_admin,
             "iat": int(now.timestamp()),

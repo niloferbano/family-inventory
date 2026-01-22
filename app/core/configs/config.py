@@ -26,5 +26,13 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://family_test:family_pass@localhost:5433/family_test"
     )
 
+    RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
+    NOTIFICATION_EXCHANGE: str = "notifications"
+    NOTIFICATION_ROUTING_KEY: str = "notifications.events"
+    NOTIFICATION_QUEUE = "notifications.q"
+    NOTIFICATION_DLX = "notifications.dlx"
+    NOTIFICATION_DLQ = "notifications.dlq"
+    NOTIFICATION_ROUTING_KEY = "notifications.#"
+
 
 settings = Settings()

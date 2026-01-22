@@ -2,9 +2,11 @@ from datetime import date
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel
+from fastapi import Query
+from pydantic import BaseModel, model_validator
 
-from app.apis.inventory.models import InventoryCategory
+from app.apis.inventory.types import InventoryCategory
+from app.core.database.base import HomeId
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
 
@@ -25,7 +27,7 @@ class InventoryCreateResponse(BaseApiSchema):
     unit: str
     expiry_date: date | None
     notes: str | None
-    home_id: UUID
+    home_id: HomeId
 
 
 class InventoryGetResponse(BaseApiSchema):
@@ -36,10 +38,10 @@ class InventoryGetResponse(BaseApiSchema):
     unit: str
     expiry_date: date | None
     notes: str | None
-    home_id: UUID
+    home_id: HomeId
 
 
-class PaginatedInventorytItemResponse(PaginatedOutput[InventoryGetResponse]):
+class PaginatedInventoryItemResponse(PaginatedOutput[InventoryGetResponse]):
     results: list[InventoryGetResponse]
 
 
@@ -48,6 +50,17 @@ class ExpiryFilter(StrEnum):
     EXPIRING_SOON = "expiring_soon"
 
 
-class InventoryQueryParams(BaseModel):
-    expiry: ExpiryFilter | None = None
-    days: int = 7
+class InventoryFilters(BaseModel):
+    def __init__(
+        self,
+        category: list[InventoryCategory] | None = Query(default=None),
+        expiry: ExpiryFilter | None = Query(default=None),
+        days: int = Query(default=7, ge=1, le=365),
+    ):
+        super().__init__(category=category, expiry=expiry, days=days)
+
+    @model_validator(mode="after")
+    def validate_days_usage(self):
+        if self.expiry != ExpiryFilter.EXPIRING_SOON:
+            self.days = 7
+        return self

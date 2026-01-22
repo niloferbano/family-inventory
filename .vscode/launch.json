@@ -18,6 +18,20 @@
         "PYTHONPATH": "${workspaceFolder}"
       },
       "console": "integratedTerminal"
+    },
+    {
+      "name": "pytest (tests)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/unit/home_user/test_home_user.py::test_duplicate_member_returns_error"
+      ],
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "console": "integratedTerminal"
     }
   ]
 }

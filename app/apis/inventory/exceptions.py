@@ -1,6 +1,6 @@
-# app/apis/inventory/exceptions.py
 from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import DomainConflictError
+from app.core.database.exceptions import (DomainConflictError,
+                                          DomainPermissionError)
 
 
 class InventoryItemNameConflict(DomainConflictError):
@@ -12,7 +12,7 @@ class InventoryItemNameConflict(DomainConflictError):
         )
 
 
-class InventoryAccessDenied(DomainConflictError):
+class InventoryAccessDenied(DomainPermissionError):
     def __init__(self, home_id: str):
         super().__init__(
             code=ErrorCode.INVENTORY_ACCESS_DENIED,

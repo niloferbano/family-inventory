@@ -36,7 +36,7 @@ class HomeService:
         return home
 
     async def get_home_for_user(self, home_id: HomeId):
-        home = await self.home_repo.get_for_user(
+        home = await self.home_repo.get_home_for_user(
             home_id=home_id,
             user_id=self.current_user.id,
             is_admin=self.current_user.is_admin,

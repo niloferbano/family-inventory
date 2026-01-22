@@ -22,7 +22,7 @@ class HomeRepository:
         try:
             await self.session.flush()
         except IntegrityError:
-            raise HomeAlreadyExists()
+            raise HomeAlreadyExists(home_name=home.name)
         return home
 
     async def get_by_name(self, name: str) -> Home | None:
@@ -35,7 +35,7 @@ class HomeRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_for_user(self, home_id: HomeId, user_id: UserId, is_admin: bool):
+    async def get_home_for_user(self, home_id: HomeId, user_id: UserId, is_admin: bool):
         stmt = query_get_home_for_user(home_id, user_id, is_admin)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
