@@ -6,15 +6,14 @@ from fastapi import FastAPI
 from app.apis.homes.router import router as homes_router
 from app.apis.homeuser.router import router as home_user_router
 from app.apis.inventory.router import router as inventory_router
-from app.apis.notifications.brokers import RabbitMQPublisher
+from app.apis.notifications.brokers import RabbitMQBroker
 from app.apis.users.router import router as users_router
 from app.core.configs.config import settings
 from app.core.exception_handlers import register_exception_handlers
 
-rabbit_publisher = RabbitMQPublisher(
+rabbit_publisher = RabbitMQBroker(
     amqp_url=settings.RABBITMQ_URL,
     exchange_name=settings.NOTIFICATION_EXCHANGE,
-    routing_key=settings.NOTIFICATION_ROUTING_KEY,
 )
 
 

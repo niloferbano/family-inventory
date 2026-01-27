@@ -17,6 +17,8 @@ class EventEnvelope:
 
 
 class EventBroker(Protocol):
+    async def connect(self) -> None: ...
+    async def close(self) -> None: ...
     async def publish(self, event: EventEnvelope) -> None: ...
 
 
@@ -87,15 +89,34 @@ class RabbitMQBroker(EventBroker):
         if not self._exchange:
             raise RuntimeError("RabbitMQBroker is not connected. Call connect() first.")
 
+        event_id: str | None = None
+        try:
+            v = event.payload.get("event_id")
+            event_id = str(v) if v else None
+        except Exception:
+            event_id = None
+
+        message_id = event_id or (str(event.key) if event.key else None)
+
+        correlation_id = str(event.key) if event.key else None
+
+        headers = dict(event.headers or {})
+        if event.key:
+            headers["x-event-key"] = str(event.key)
+        if event_id:
+            headers["x-event-id"] = event_id
+
         body = json.dumps(
-            {"payload": event.payload, "headers": event.headers or {}},
+            {"payload": event.payload, "headers": headers},
             default=str,
-        ).encode()
+        ).encode("utf-8")
 
         msg = aio_pika.Message(
             body=body,
             content_type="application/json",
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-            headers=dict(event.headers or {}),
+            headers=headers,
+            message_id=message_id,
+            correlation_id=correlation_id,
         )
         await self._exchange.publish(msg, routing_key=event.topic)

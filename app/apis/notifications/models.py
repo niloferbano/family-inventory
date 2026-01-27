@@ -5,9 +5,11 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,7 +39,8 @@ class NotificationEvent(SQLBase, TimeStampMixin):
     recipients: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
-        default_factory=dict,
+        default=dict,
+        server_default=sa.text("'{}'::jsonb"),
     )
 
     deliveries: Mapped[list["NotificationDelivery"]] = relationship(
@@ -121,6 +124,15 @@ class NotificationDelivery(SQLBase, TimeStampMixin):
         "NotificationEvent",
         back_populates="deliveries",
     )
+    locked_by: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    lock_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -131,3 +143,30 @@ class NotificationDelivery(SQLBase, TimeStampMixin):
             name="uq_delivery_per_target",
         ),
     )
+
+
+class NotificationOutbox(SQLBase, TimeStampMixin):
+    __tablename__ = "notification_outbox"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=False
+    )
+
+    topic: Mapped[str] = mapped_column(String(200), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    headers: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING"
+    )  # PENDING|SENT|FAILED
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (Index("ix_outbox_status_next_retry", "status", "next_retry_at"),)

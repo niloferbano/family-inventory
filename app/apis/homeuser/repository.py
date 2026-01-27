@@ -48,6 +48,7 @@ class HomeUserRepository:
             sa.select(User, HomeUser.user_type)
             .join(HomeUser, HomeUser.user_id == User.id)
             .where(HomeUser.home_id == home_id)
+            .order_by(HomeUser.user_type.asc(), User.id.asc())
         )
         rows = (await self.session.execute(stmt)).all()
         return [(user, role) for user, role in rows]

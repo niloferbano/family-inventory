@@ -1,9 +1,11 @@
+import datetime
 from datetime import date
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date
+from sqlalchemy import Date, DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -91,6 +93,14 @@ class InventoryExpiryAlert(SQLBase, TimeStampMixin):
     alert_date: Mapped[date] = mapped_column(
         Date, nullable=False
     )  # day bucket (prevents daily duplicates)
+
+    published_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    publish_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_publish_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

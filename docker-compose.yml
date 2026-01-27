@@ -1,6 +1,13 @@
-version: "3.9"
-
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
   postgres:
     image: postgres:16
     container_name: family-postgres
@@ -8,15 +15,16 @@ services:
     environment:
       POSTGRES_USER: family_user
       POSTGRES_PASSWORD: family_pass
-      POSTGRES_DB: familyinventory
+      POSTGRES_DB: family_inventory
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U family_user"]
+      test: ["CMD-SHELL", "pg_isready -U family_user -d family_inventory"]
       interval: 5s
-      retries: 5
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7
@@ -32,6 +40,7 @@ services:
       interval: 3s
       timeout: 3s
       retries: 5
+
   postgres-test:
     image: postgres:16
     container_name: family-test-postgres
@@ -41,6 +50,18 @@ services:
       POSTGRES_DB: family_test
     ports:
       - "5433:5432"
+
+  inventory-expiry-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: family-inventory:local
+    command: ["python", "-m", "app.jobs.inventory_expiry_job"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
 
 volumes:
   pgdata:

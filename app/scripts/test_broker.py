@@ -1,36 +1,40 @@
 import asyncio
-from dataclasses import dataclass
-from typing import Any, Mapping
 
-from app.apis.notifications.brokers import RabbitMQBroker
+from app.apis.notifications.brokers import EventEnvelope, RabbitMQBroker
 
 
-@dataclass(frozen=True)
-class EventEnvelope:
-    topic: str
-    key: str | None
-    payload: Mapping[str, Any]
-    headers: Mapping[str, str] | None = None
-
-
-async def main():
+async def test():
     broker = RabbitMQBroker(
-        amqp_url="amqp://guest:guest@localhost:5672/",
+        amqp_url="amqp://guest:guest@localhost/",
         exchange_name="notifications",
     )
     await broker.connect()
-    try:
-        evt = EventEnvelope(
-            topic="inventory.item.expiring_soon",
-            key="item-123",
-            payload={"item_id": "item-123", "name": "Milk", "days_left": 2},
-            headers={"source": "inventory", "home_id": "home-xyz"},
+
+    await broker.publish(
+        EventEnvelope(
+            topic="inventory.item.expired",
+            key="test",
+            payload={
+                "event_id": "11111111-1111-1111-1111-111111111111",
+                "home_id": "22222222-2222-2222-2222-222222222222",
+                "item_name": "Milk",
+                "expiry_date": "2026-01-01",
+                "source": "unit_test",
+                "event_type": "inventory.item.expired",
+                "message": "Your item Milk has expired on 2026-01-01.",
+                "recipients": [
+                    {
+                        "channel": "log",
+                        "recipient": "stdout",
+                        "recipient_type": "log",
+                    }
+                ],
+            },
+            headers={"source": "test"},
         )
-        await broker.publish(evt)  # your broker.publish expects EventEnvelope
-        print("✅ Published")
-    finally:
-        await broker.close()
+    )
+
+    await broker.close()
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(test())

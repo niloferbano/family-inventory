@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,7 +12,6 @@ from app.schemas_base.base import BaseApiSchema
 class NotificationRecipient(BaseModel):
     channel: NotificationChannel
     recipient: str  # email address, phone, slack channel id, user_id, etc.
-    metadata: dict[str, Any] | None = None  # optional e.g. locale, tenant, etc.
 
 
 class NotificationRequest(BaseModel):

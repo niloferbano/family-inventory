@@ -1,14 +1,23 @@
 import asyncio
 import logging
+from datetime import date
+from uuid import UUID
 
 from app.apis.inventory.expiry_service import InventoryExpiryService
+from app.apis.inventory.repository import InventoryRepository
 from app.apis.inventory.types import InventoryAlertType
-from app.apis.notifications.brokers import LogBroker, RabbitMQBroker
+from app.apis.notifications.brokers import (EventBroker, LogBroker,
+                                            RabbitMQBroker)
 from app.core.configs.config import settings
+from app.core.database.base import InventoryExpiryAlertId
 from app.core.database.session import get_db
-from app.core.messaging.broker import EventBroker
 
 logger = logging.getLogger(__name__)
+
+MAX_BATCHES = 100
+
+PUBLISH_TIMEOUT_S = 5.0  # per publish call
+CONCURRENCY = 20  # semaphore limit
 
 
 async def run_inventory_expiry_job(
@@ -18,58 +27,135 @@ async def run_inventory_expiry_job(
     broker: EventBroker | None = None,
 ) -> None:
     db = get_db()
-
-    # Standalone script: lifespan won't run, so we connect here.
     broker = broker or LogBroker()
     await broker.connect()
+    today = date.today()
 
     try:
-        # 1) DB work (scan + register alerts) in one transaction
+        # 1) Register alerts (DB transaction) -> returns ALERT IDS (InventoryExpiryAlert.id)
         async with db.begin() as session:
-            expiry_service = InventoryExpiryService(session=session, broker=broker)
-            batch = await expiry_service.collect_expiry_alerts(days=days, limit=limit)
+            repo = InventoryRepository(session)
 
-        expiring = batch.expiring_soon
-        expired = batch.expired
+            expiring_alert_ids: list[UUID] = await repo.register_expiry_alerts(
+                alert_type=InventoryAlertType.EXPIRING_SOON,
+                today=today,
+                days=days,
+                limit=limit,
+            )
+            expired_alert_ids: list[UUID] = await repo.register_expiry_alerts(
+                alert_type=InventoryAlertType.EXPIRED,
+                today=today,
+                limit=limit,
+            )
 
         logger.info(
-            "Inventory expiry job completed: expiring=%d expired=%d",
-            len(expiring),
-            len(expired),
+            "Inventory expiry job registered alerts: expiring=%d expired=%d",
+            len(expiring_alert_ids),
+            len(expired_alert_ids),
         )
 
-        if not expiring and not expired:
+        if not expiring_alert_ids and not expired_alert_ids:
             logger.info("Inventory expiry job: nothing new to publish")
             return
 
-        # 2) Publish events (NO DB transaction held open)
-        async def _publish_items(items, alert_type: InventoryAlertType) -> None:
-            if not items:
-                return
-            async with asyncio.TaskGroup() as tg:
-                for item in items:
-                    tg.create_task(
-                        expiry_service.publish_expiry_event(
-                            item=item,
-                            alert_type=alert_type,
-                        )
+        # 2) Publish + mark results for each alert type
+
+        async def _publish_and_mark(alert_type: InventoryAlertType) -> int:
+            published_count = 0
+            batches_processed = 0
+
+            expiry_service = InventoryExpiryService(
+                session=None, broker=broker
+            )  # publish-only
+            sem = asyncio.Semaphore(CONCURRENCY)
+
+            async def _publish_one(
+                alert, item
+            ) -> tuple[InventoryExpiryAlertId, Exception | None]:
+                """
+                Returns (alert_id, None) on success, (alert_id, exc) on failure/timeout.
+                """
+                async with sem:
+                    try:
+                        async with asyncio.timeout(PUBLISH_TIMEOUT_S):
+                            await expiry_service.publish_expiry_event(
+                                item=item, alert_type=alert_type
+                            )
+                        return alert.id, None
+                    except Exception as exc:
+                        return alert.id, exc
+
+            while batches_processed < MAX_BATCHES:
+                batches_processed += 1
+
+                # 1) Fetch unpublished alerts+items (DB txn)
+                async with db.begin() as session:
+                    repo = InventoryRepository(session)
+                    rows = await repo.get_unpublished_alerts_with_items(
+                        alert_type=alert_type,
+                        limit=limit,
                     )
 
-        # Note: publish_expiry_event only uses broker, not DB
-        await asyncio.gather(
-            _publish_items(expiring, InventoryAlertType.EXPIRING_SOON),
-            _publish_items(expired, InventoryAlertType.EXPIRED),
-        )
+                if not rows:
+                    return published_count
+
+                # 2) Publish concurrently (no DB txn), collect results as they finish
+                tasks = [
+                    asyncio.create_task(_publish_one(alert, item))
+                    for alert, item in rows
+                ]
+
+                published_ids: list[InventoryExpiryAlertId] = []
+                failed_ids: list[InventoryExpiryAlertId] = []
+                failed_err: dict[InventoryExpiryAlertId, str] = {}
+
+                for t in asyncio.as_completed(tasks):
+                    alert_id, exc = await t
+                    if exc is None:
+                        published_ids.append(alert_id)
+                    else:
+                        failed_ids.append(alert_id)
+                        failed_err[alert_id] = f"{type(exc).__name__}: {exc}"
+                        logger.exception(
+                            "Failed to publish %s alert=%s",
+                            alert_type.value,
+                            str(alert_id),
+                            exc_info=exc,
+                        )
+
+                # 3) Mark results (DB txn)
+                async with db.begin() as session:
+                    repo = InventoryRepository(session)
+
+                    if published_ids:
+                        await repo.mark_alerts_published(alert_ids=published_ids)
+                        published_count += len(published_ids)
+
+                    if failed_ids:
+                        combined = "; ".join(list(failed_err.values())[:3])
+                        await repo.mark_alerts_failed(
+                            alert_ids=failed_ids, error=combined
+                        )
+
+            # If we hit MAX_BATCHES, we intentionally stop and let the *next cron run* continue.
+            logger.warning(
+                "Reached MAX_BATCHES=%d for alert_type=%s. Remaining unpublished will be processed next run.",
+                MAX_BATCHES,
+                alert_type.value,
+            )
+            return published_count
+
+        expiring_published = await _publish_and_mark(InventoryAlertType.EXPIRING_SOON)
+        expired_published = await _publish_and_mark(InventoryAlertType.EXPIRED)
 
         logger.info(
-            "Inventory expiry job: published %d expiring_soon, %d expired",
-            len(expiring),
-            len(expired),
+            "Inventory expiry job: published expiring=%d expired=%d",
+            expiring_published,
+            expired_published,
         )
 
     finally:
         await broker.close()
-        # optional for a one-off script
         await db.disconnect()
 
 

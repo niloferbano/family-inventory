@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from pydantic_settings import BaseSettings
 
 from app.core.configs.cache_config import CacheConfiguration
@@ -5,7 +7,7 @@ from app.core.configs.cache_config import CacheConfiguration
 
 class Settings(BaseSettings):
     DATABASE_URL: str = (
-        "postgresql+asyncpg://family_user:family_pass@localhost:5432/familyinventory"
+        "postgresql+asyncpg://family_user:family_pass@localhost:5432/family_inventory"
     )
 
     DEBUG: bool = True
@@ -29,10 +31,10 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
     NOTIFICATION_EXCHANGE: str = "notifications"
     NOTIFICATION_ROUTING_KEY: str = "notifications.events"
-    NOTIFICATION_QUEUE = "notifications.q"
-    NOTIFICATION_DLX = "notifications.dlx"
-    NOTIFICATION_DLQ = "notifications.dlq"
-    NOTIFICATION_ROUTING_KEY = "notifications.#"
+    NOTIFICATION_QUEUE: ClassVar[str] = "notifications.q"
+    NOTIFICATION_DLX: ClassVar[str] = "notifications.dlx"
+    NOTIFICATION_DLQ: ClassVar[str] = "notifications.dlq"
+    NOTIFICATION_ROUTING_KEY: ClassVar[str] = "notifications.#"
 
 
 settings = Settings()

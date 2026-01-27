@@ -1,4 +1,6 @@
-from datetime import date, timedelta
+from collections.abc import Sequence
+from datetime import date, datetime, timedelta
+from time import timezone
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -8,7 +10,7 @@ from app.apis.inventory.exceptions import InventoryItemNameConflict
 from app.apis.inventory.models import InventoryExpiryAlert, InventoryItem
 from app.apis.inventory.schema import ExpiryFilter, InventoryFilters
 from app.apis.inventory.types import InventoryAlertType
-from app.core.database.base import HomeId
+from app.core.database.base import HomeId, InventoryExpiryAlertId
 from app.core.database.pagination import Page
 
 
@@ -107,45 +109,130 @@ class InventoryRepository:
         today: date,
         days: int = 7,
         home_id: HomeId | None = None,
-    ) -> list[InventoryItem]:
-        q = sa.select(InventoryItem).where(InventoryItem.expiry_date.isnot(None))
-
+        limit: int = 500,
+    ) -> list[InventoryExpiryAlertId]:
+        where_clauses: list[sa.ColumnElement[bool]] = [
+            InventoryItem.expiry_date.isnot(None),
+        ]
         if home_id is not None:
-            q = q.where(InventoryItem.home_id == home_id)  # ✅ must reassign
+            where_clauses.append(InventoryItem.home_id == home_id)
 
         if alert_type == InventoryAlertType.EXPIRED:
-            q = q.where(InventoryItem.expiry_date < today)
+            where_clauses.append(InventoryItem.expiry_date < today)
 
         elif alert_type == InventoryAlertType.EXPIRING_SOON:
-            q = q.where(
+            where_clauses.append(
                 InventoryItem.expiry_date.between(today, today + timedelta(days=days))
             )
         else:
             raise ValueError("invalid alert_type")
-
-        items = (await self.session.execute(q)).scalars().all()
-        if not items:
-            return []
-
-        rows = [
-            {
-                "inventory_item_id": item.id,
-                "alert_type": alert_type,  # ✅ store string in DB
-                "alert_date": today,
-            }
-            for item in items
-        ]
-
-        stmt = (
-            pg_insert(InventoryExpiryAlert)
-            .values(rows)
-            .on_conflict_do_nothing(constraint="uq_item_alert_once_per_day")
-            .returning(InventoryExpiryAlert.inventory_item_id)
+        candidates = (
+            sa.select(
+                InventoryItem.id.label("inventory_item_id"),
+                sa.literal(
+                    alert_type, type_=InventoryExpiryAlert.alert_type.type
+                ).label("alert_type"),
+                sa.literal(today, type_=sa.Date()).label("alert_date"),
+            )
+            .where(*where_clauses)
+            .order_by(InventoryItem.expiry_date.asc(), InventoryItem.created_at.asc())
+            .limit(limit)
         )
 
-        inserted_ids = (await self.session.execute(stmt)).scalars().all()
-        if not inserted_ids:
-            return []
+        insert_stmt = (
+            pg_insert(InventoryExpiryAlert)
+            .from_select(
+                ["inventory_item_id", "alert_type", "alert_date"],
+                candidates,
+            )
+            .on_conflict_do_nothing(constraint="uq_item_alert_once_per_day")
+            .returning(InventoryExpiryAlert.id)
+        )
 
-        inserted_set = set(inserted_ids)
-        return [item for item in items if item.id in inserted_set]
+        alert_ids = list((await self.session.execute(insert_stmt)).scalars().all())
+        return alert_ids
+
+    async def get_unpublished_alerts_with_items(
+        self,
+        *,
+        alert_type: InventoryAlertType | None = None,
+        home_id: HomeId | None = None,
+        limit: int = 500,
+        max_attempts: int = 5,
+    ) -> list[tuple[InventoryExpiryAlert, InventoryItem]]:
+        """
+        Fetch alert rows that still need publishing, with their InventoryItem.
+        Returns [(alert, item), ...]
+        """
+        where_clauses: list[sa.ColumnElement[bool]] = [
+            InventoryExpiryAlert.published_at.is_(None),
+            InventoryExpiryAlert.publish_attempts < max_attempts,
+        ]
+        if alert_type is not None:
+            where_clauses.append(InventoryExpiryAlert.alert_type == alert_type)
+        if home_id is not None:
+            where_clauses.append(InventoryItem.home_id == home_id)
+
+        stmt = (
+            sa.select(InventoryExpiryAlert, InventoryItem)
+            .join(
+                InventoryItem,
+                InventoryExpiryAlert.inventory_item_id == InventoryItem.id,
+            )
+            .where(*where_clauses)
+            .order_by(
+                InventoryExpiryAlert.alert_date.asc(), InventoryExpiryAlert.id.asc()
+            )
+            .limit(limit)
+        )
+
+        stmt = stmt.with_for_update(skip_locked=True)
+
+        rows = (await self.session.execute(stmt)).all()
+        return [(alert, item) for alert, item in rows]
+
+    async def mark_alerts_published(
+        self,
+        *,
+        alert_ids: Sequence[InventoryExpiryAlertId],
+        now: datetime | None = None,
+    ) -> int:
+        if not alert_ids:
+            return 0
+        now = now or datetime.now(timezone.utc)
+
+        stmt = (
+            sa.update(InventoryExpiryAlert)
+            .where(InventoryExpiryAlert.id.in_(list(alert_ids)))
+            .where(InventoryExpiryAlert.published_at.is_(None))
+            .values(
+                published_at=now,
+                publish_attempts=InventoryExpiryAlert.publish_attempts + 1,
+                last_publish_error=None,
+            )
+        )
+        res = await self.session.execute(stmt)
+        return int(res.rowcount or 0)
+
+    async def mark_alerts_failed(
+        self,
+        *,
+        alert_ids: Sequence[InventoryExpiryAlertId],
+        error: str,
+    ) -> int:
+        if not alert_ids:
+            return 0
+
+        error = (error or "")[:2000]
+
+        stmt = (
+            sa.update(InventoryExpiryAlert)
+            .where(InventoryExpiryAlert.id.in_(list(alert_ids)))
+            .where(InventoryExpiryAlert.published_at.is_(None))
+            .values(
+                publish_attempts=InventoryExpiryAlert.publish_attempts + 1,
+                last_publish_error=error,
+            )
+        )
+        res = await self.session.execute(stmt)
+        return int(res.rowcount or 0)

@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
+import socket
+import uuid
+from dataclasses import dataclass, field
 
 import aio_pika
 from aio_pika import IncomingMessage
@@ -11,9 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.types import NotificationChannel
 from app.apis.notifications.worker.channels import ChannelSender, LogSender
-from app.apis.notifications.worker.handlers import process_event
+from app.apis.notifications.worker.handlers import (
+    build_failure_results_for_claimed, finalize_delivery_results,
+    prepare_event_deliveries, send_claimed_deliveries)
 
 logger = logging.getLogger(__name__)
+
+## NOTES : Move worker config to env/config later
 
 
 @dataclass
@@ -22,7 +28,7 @@ class WorkerConfig:
     exchange_name: str = "notifications"
     queue_name: str = "notifications.q"
 
-    bindings: list[str] = None
+    bindings: list[str] = field(default_factory=list)
 
     dlx_name: str = "notifications.dlx"
     dlq_name: str = "notifications.dlq"
@@ -51,6 +57,8 @@ class NotificationWorker:
     ):
         self.cfg = cfg
         self.sessionmaker = sessionmaker
+
+        self.worker_id = f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}"
 
         self._conn: aio_pika.RobustConnection | None = None
         self._channel: aio_pika.RobustChannel | None = None
@@ -104,16 +112,19 @@ class NotificationWorker:
 
     async def _send_to_dlq(self, msg: IncomingMessage, reason: str) -> None:
         assert self._dlx is not None
+
         headers = dict(msg.headers or {})
         headers["x-dlq-reason"] = reason
-        headers["x-original-routing-key"] = msg.routing_key
+        headers.setdefault("x-original-routing-key", msg.routing_key or "")
 
         await self._dlx.publish(
             aio_pika.Message(
                 body=msg.body,
                 headers=headers,
-                content_type=msg.content_type,
+                content_type=msg.content_type or "application/json",
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                message_id=msg.message_id,
+                correlation_id=msg.correlation_id,
             ),
             routing_key=self.cfg.dlq_routing_key,
         )
@@ -124,6 +135,12 @@ class NotificationWorker:
         assert self._exchange is not None
         headers = dict(msg.headers or {})
         headers["x-retry-count"] = retry_count
+        routing_key = msg.routing_key or (msg.headers or {}).get(
+            "x-original-routing-key"
+        )
+        if not routing_key:
+            await self._send_to_dlq(msg, reason="missing_routing_key_on_retry")
+            return
 
         await self._exchange.publish(
             aio_pika.Message(
@@ -131,8 +148,10 @@ class NotificationWorker:
                 headers=headers,
                 content_type=msg.content_type,
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                message_id=msg.message_id,
+                correlation_id=msg.correlation_id,
             ),
-            routing_key=msg.routing_key or self.cfg.routing_key,
+            routing_key=routing_key,
         )
 
     async def on_message(self, msg: IncomingMessage) -> None:
@@ -141,21 +160,67 @@ class NotificationWorker:
         async with msg.process(requeue=False):
             try:
                 raw = json.loads(msg.body.decode("utf-8"))
-                payload = raw.get("payload") or raw  # tolerate both shapes
+                payload = raw.get("payload") or raw
 
-                # Each message gets its own DB session/transaction
+                envelope_headers = raw.get("headers") or {}
+                amqp_headers = dict(msg.headers or {})
+                headers = {**envelope_headers, **amqp_headers}
+
+                topic = msg.routing_key or ""
+
                 async with self.sessionmaker() as session:
                     async with session.begin():
-                        await process_event(
-                            session, payload=payload, senders=self.senders
+                        batch = await prepare_event_deliveries(
+                            session,
+                            topic=topic,
+                            payload=payload,
+                            headers=headers,
+                            claim_limit=1000,
+                            worker_id=self.worker_id,
                         )
+                        event_id, subject, message, claimed = (
+                            batch.event_id,
+                            batch.subject,
+                            batch.message,
+                            batch.tasks,
+                        )
+                        if not claimed:
+                            logger.info(
+                                "No deliveries to process for event_id=%s", event_id
+                            )
+                            return
+                send_exc: Exception | None = None
+
+                try:
+
+                    results = await send_claimed_deliveries(
+                        claimed=claimed,
+                        subject=subject,
+                        message=message,
+                        headers=headers,
+                        senders=self.senders,
+                        concurrency=50,
+                    )
+                except Exception as exc:
+                    send_exc = exc
+                    results = build_failure_results_for_claimed(claimed, exc)
+
+                async with self.sessionmaker() as session:
+                    async with session.begin():
+                        await finalize_delivery_results(
+                            session, worker_id=self.worker_id, results=results
+                        )
+                if send_exc:
+                    raise send_exc
 
             except Exception as exc:
                 retry_count += 1
+
                 if retry_count > self.cfg.max_retries:
                     logger.exception("DLQ after max retries: %s", exc)
                     await self._send_to_dlq(
-                        msg, reason=f"max_retries_exceeded: {type(exc).__name__}"
+                        msg,
+                        reason=f"max_retries_exceeded: {type(exc).__name__}",
                     )
                     return
 
@@ -164,7 +229,6 @@ class NotificationWorker:
                     "Retrying in %.1fs (retry=%d): %s", delay, retry_count, exc
                 )
 
-                # simple delay then republish
                 await asyncio.sleep(delay)
                 await self._republish_with_retry(msg, retry_count=retry_count)
 

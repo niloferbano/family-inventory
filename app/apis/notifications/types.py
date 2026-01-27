@@ -1,11 +1,12 @@
 from enum import StrEnum
-from typing import Any, TypedDict
+from typing import TypedDict
 
 
 class NotificationChannel(StrEnum):
     EMAIL = "email"
     SMS = "sms"
     PUSH = "push"
+    LOG = "log"
 
 
 class NotificationRecipientType(StrEnum):
@@ -27,7 +28,6 @@ class DeliveryStatus(StrEnum):
 class RecipientPayload(TypedDict):
     channel: str
     recipient: str
-    metadata: dict[str, Any]
 
 
 class NotificationMessage(TypedDict):
