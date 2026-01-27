@@ -1,7 +1,9 @@
 from math import ceil
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.apis.homes.exceptions import HomeAlreadyExists
 from app.apis.homes.models import Home
 from app.apis.homes.repository import HomeRepository
 from app.apis.homes.schema import (GetHomesResponse,
@@ -10,6 +12,8 @@ from app.apis.homes.schema import (GetHomesResponse,
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.users.models import User
 from app.core.database.base import HomeId
+from app.core.database.error_codes import ErrorCode
+from app.core.database.exceptions import DomainPermissionError
 from app.core.database.pagination import Page, update_pagination
 
 
@@ -22,20 +26,28 @@ class HomeService:
         self.home_user_repo = HomeUserRepository(session)
 
     async def create_home(self, data: HomeCreate) -> Home:
-        home = await self.home_repo.create(Home(name=data.name))
+        try:
+            home = await self.home_repo.create(Home(name=data.name))
+        except IntegrityError:
+            raise HomeAlreadyExists(home_name=data.name)
         await self.home_user_repo.assign_owner(
             home_id=home.id, user_id=self.current_user.id
         )
         return home
 
     async def get_home_for_user(self, home_id: HomeId):
-        home = await self.home_repo.get_for_user(
+        home = await self.home_repo.get_home_for_user(
             home_id=home_id,
             user_id=self.current_user.id,
             is_admin=self.current_user.is_admin,
         )
         if not home:
-            raise PermissionError("You are not allowed to access this home")
+            if not home:
+                raise DomainPermissionError(
+                    code=ErrorCode.HOME_PERMISSION_DENIED,
+                    message="You are not allowed to access this home",
+                    details={"home_id": str(home_id)},
+                )
         return home
 
     async def get_all_homes_for_user(self) -> list[GetHomeWithMembersResponse]:

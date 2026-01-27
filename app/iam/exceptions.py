@@ -1,10 +1,11 @@
-from fastapi import HTTPException, status
+from app.core.database.error_codes import ErrorCode
+from app.core.database.exceptions import DomainPermissionError
 
 
-class InvalidCredentials(HTTPException):
+class AuthenticationRequired(DomainPermissionError):
     def __init__(self):
         super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            code=ErrorCode.AUTH_REQUIRED,
+            message="Authentication required",
+            details={},
         )

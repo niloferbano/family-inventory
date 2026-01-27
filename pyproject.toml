@@ -7,7 +7,7 @@ readme = "README.md"
 
 
 [tool.poetry.dependencies]
-python = ">=3.12"
+python = ">=3.10,<4.0"
 fastapi = "^0.120.1"
 uvicorn = { extras = ["standard"], version = "^0.38.0" }
 sqlalchemy = "^2.0.44"
@@ -24,6 +24,9 @@ typer = "0.20.0"
 redis = "^7.1.0"
 ruff = "^0.14.7"
 httpx = "^0.28.1"
+alembic = "^1.17.2"
+psycopg2-binary = "^2.9.11"
+aio-pika = "^9.5.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2"

@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Optional
+from uuid import uuid4
+
+import sqlalchemy as sa
+from sqlalchemy import DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import (ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
+                                          NotificationRecipientType)
+from app.core.database.base import SQLBase, TimeStampMixin
+
+
+class NotificationEvent(SQLBase, TimeStampMixin):
+    __tablename__ = "notification_events"
+
+    # This is your event_id (globally unique)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        nullable=False,
+    )
+
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+
+    subject: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # snapshot of recipients (optional, useful for audit/debug)
+    recipients: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=sa.text("'{}'::jsonb"),
+    )
+
+    deliveries: Mapped[list["NotificationDelivery"]] = relationship(
+        "NotificationDelivery",
+        back_populates="event",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class NotificationDelivery(SQLBase, TimeStampMixin):
+    __tablename__ = "notification_deliveries"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        nullable=False,
+    )
+
+    # FK to NotificationEvent.id
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notification_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
+
+    SAEnum(
+        NotificationChannel,
+        name="notification_channel_enum",
+        values_callable=lambda e: [x.value for x in e],
+        native_enum=True,
+    )
+    recipient_type: Mapped[NotificationRecipientType] = mapped_column(
+        SAEnum(
+            NotificationRecipientType,
+            values_callable=lambda e: [x.value for x in e],
+            native_enum=True,
+            name="notification_recipient_type_enum",
+        ),
+        nullable=False,
+    )
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
+    channel: Mapped[NotificationChannel] = mapped_column(
+        SAEnum(
+            NotificationChannel,
+            name="notification_channel_enum",
+            values_callable=lambda e: [x.value for x in e],
+            native_enum=True,
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[DeliveryStatus] = mapped_column(
+        SAEnum(
+            DeliveryStatus,
+            name="notification_delivery_status_enum",
+            values_callable=lambda e: [x.value for x in e],
+            native_enum=True,
+        ),
+        nullable=False,
+        default=DeliveryStatus.PENDING,
+        index=True,
+    )
+
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    event: Mapped["NotificationEvent"] = relationship(
+        "NotificationEvent",
+        back_populates="deliveries",
+    )
+    locked_by: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    lock_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "channel",
+            "recipient_type",
+            "recipient",
+            name="uq_delivery_per_target",
+        ),
+    )
+
+
+class NotificationOutbox(SQLBase, TimeStampMixin):
+    __tablename__ = "notification_outbox"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=False
+    )
+
+    topic: Mapped[str] = mapped_column(String(200), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    headers: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING"
+    )  # PENDING|SENT|FAILED
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (Index("ix_outbox_status_next_retry", "status", "next_retry_at"),)

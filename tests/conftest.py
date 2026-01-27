@@ -81,3 +81,12 @@ async def auth_headers(mock_db):
 
         token = TokenService.create_access_token(payload)
         return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def db_session(mock_db):
+    async with mock_db.sessionmaker() as session:
+        try:
+            yield session
+        finally:
+            await session.rollback()

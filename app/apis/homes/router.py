@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 
-from app.apis.homes.exceptions import HomeAlreadyExists
 from app.apis.homes.schema import (GetHomeWithMembersResponse, HomeCreate,
                                    HomeRead, PaginatedAdminHomesResponse)
 from app.apis.homes.service import HomeService
@@ -20,14 +19,8 @@ async def create_home(
     current_user=Depends(get_current_user),
 ):
     async with db_manager.begin() as session:
-        try:
-            service = HomeService(session, current_user)
-            return await service.create_home(data)
-        except HomeAlreadyExists:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Home with this name already exists",
-            )
+        service = HomeService(session, current_user)
+        return await service.create_home(data)
 
 
 @router.get("/{home_id}", response_model=HomeRead)

@@ -3,6 +3,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.homeuser.models import HomeUser, UserType
+from app.apis.users.models import User
 from app.core.database.base import HomeId, UserId
 
 
@@ -34,11 +35,23 @@ class HomeUserRepository:
         stmt = sa.select(HomeUser).where(HomeUser.home_id == home_id)
         return (await self.session.scalars(stmt)).all()
 
-    async def get_all_user_homes(self, user_id: UserId):
+    async def get_members_for_home(self, user_id: UserId):
         stmt = sa.select(HomeUser.home_id).where(
             sa.and_(HomeUser.user_id == user_id, HomeUser.user_type == UserType.OWNER)
         )
         return await self.session.scalars(stmt).all()
+
+    async def list_members_with_users(
+        self, home_id: HomeId
+    ) -> list[tuple[User, UserType]]:
+        stmt = (
+            sa.select(User, HomeUser.user_type)
+            .join(HomeUser, HomeUser.user_id == User.id)
+            .where(HomeUser.home_id == home_id)
+            .order_by(HomeUser.user_type.asc(), User.id.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [(user, role) for user, role in rows]
 
     async def user_has_access(self, user_id: UserId, home_id: HomeId) -> bool:
         return bool(await self.get(user_id, home_id))
