@@ -11,6 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.apis.notifications.ingest import NotificationIngestService
 from app.apis.notifications.models import (NotificationDelivery,
                                            NotificationEvent)
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
@@ -207,35 +208,15 @@ async def prepare_event_deliveries(
     event_id = _parse_event_id(payload, headers)
     now = _utcnow()
 
-    await ensure_event_exists(
-        session, event_id=event_id, topic=topic, payload=payload, headers=headers
-    )
+    # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
+    ingest = NotificationIngestService(session=session)
+    await ingest.handle_inventory_event(topic=topic, payload=payload, headers=headers)
 
-    recipients = payload.get("recipients", [])
-    subject = payload.get("subject") or _subject_for(topic, payload)
-    message = payload.get("message") or _message_for(topic, payload)
+    # subject/message should be owned by notifications layer
+    subject = ingest._subject(topic, payload)
+    message = ingest._message(topic, payload)
 
-    if not recipients:
-        return EventWorkBatch(event_id, subject, message, [])
-
-    rows: list[dict[str, Any]] = [
-        dict(
-            event_id=event_id,
-            channel=NotificationChannel(r["channel"]),
-            recipient_type=NotificationRecipientType(r.get("recipient_type", "log")),
-            recipient=r["recipient"],
-            status=DeliveryStatus.PENDING,
-            attempt_count=0,
-            max_attempts=5,
-            next_retry_at=None,
-            last_attempt_at=None,
-            last_error=None,
-        )
-        for r in recipients
-    ]
-
-    await bulk_upsert_deliveries(session, rows=rows)
-
+    # ✅ Step 2: claim deliveries from DB (NOT from payload.recipients)
     claimed_rows = await claim_deliveries_to_send(
         session,
         event_id=event_id,
@@ -257,7 +238,9 @@ async def prepare_event_deliveries(
         for d in claimed_rows
     ]
 
-    return EventWorkBatch(event_id, subject, message, claimed)
+    return EventWorkBatch(
+        event_id=event_id, subject=subject, message=message, tasks=claimed
+    )
 
 
 async def send_claimed_deliveries(
@@ -281,7 +264,7 @@ async def send_claimed_deliveries(
             return DeliverySendResult(
                 delivery_id=d.id,
                 status=DeliveryStatus.FAILED,
-                error=f"Unsupported channel: {d.channel.value}",
+                last_error=f"Unsupported channel: {d.channel.value}",
                 next_retry_at=None,
             )
 
@@ -293,13 +276,18 @@ async def send_claimed_deliveries(
                     message=message,
                     headers=dict(headers),
                 )
-                return DeliverySendResult(delivery_id=d.id, accepted=True)
+                return DeliverySendResult(
+                    delivery_id=d.id,
+                    status=DeliveryStatus.SENT,
+                    last_error=None,
+                    next_retry_at=None,
+                )
             except Exception as exc:
                 # schedule retry time (worker can still do retry by republishing)
                 return DeliverySendResult(
                     delivery_id=d.id,
                     status=DeliveryStatus.FAILED,
-                    error=f"{type(exc).__name__}: {exc}",
+                    last_error=f"{type(exc).__name__}: {exc}",
                     next_retry_at=_next_retry_at(d.attempt_count),
                 )
 

@@ -170,3 +170,56 @@ class NotificationOutbox(SQLBase, TimeStampMixin):
     )
 
     __table_args__ = (Index("ix_outbox_status_next_retry", "status", "next_retry_at"),)
+
+
+class NotificationSubscription(SQLBase, TimeStampMixin):
+    __tablename__ = "notification_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    home_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("homes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    topic: Mapped[str] = mapped_column(String(200), nullable=False)
+    channel: Mapped[NotificationChannel] = mapped_column(
+        SAEnum(
+            NotificationChannel,
+            name="notification_channel_enum",
+            values_callable=lambda e: [x.value for x in e],
+            native_enum=True,
+        ),
+        nullable=False,
+        index=True,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        sa.Boolean(),
+        nullable=False,
+        default=True,
+        server_default=sa.text("true"),
+    )
+
+    target: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "home_id",
+            "user_id",
+            "topic",
+            "channel",
+            name="uq_notification_subscription_target",
+        ),
+    )
