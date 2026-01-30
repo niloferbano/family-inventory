@@ -1,13 +1,33 @@
 import React, { useState } from "react";
-import { createInventoryItem, InventoryCreateRequest } from "../api/inventory";
+import {
+  createInventoryItem,
+  InventoryCategory,
+  InventoryCreateRequest,
+} from "../api/inventory";
 import { clearToken } from "../api/auth";
 
-export default function AddInventory({ onLogout }: { onLogout: () => void }) {
+const CATEGORY_OPTIONS: Array<{ value: InventoryCategory; label: string }> = [
+  { value: "kitchen", label: "Kitchen" },
+  { value: "bathroom", label: "Bathroom" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "other", label: "Other" },
+];
+
+export default function AddInventory({
+  homeId,
+  onCreated,
+  onLogout,
+}: {
+  homeId: string;
+  onCreated?: () => void;
+  onLogout: () => void;
+}) {
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState<number | "">("");
-  const [unit, setUnit] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [unit, setUnit] = useState("pcs");
   const [expiryDate, setExpiryDate] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState<InventoryCategory>("kitchen");
+  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,22 +38,32 @@ export default function AddInventory({ onLogout }: { onLogout: () => void }) {
     setError(null);
     setResult(null);
 
+    if (!homeId) {
+      setError("Select a home before adding inventory items.");
+      setLoading(false);
+      return;
+    }
+
     const payload: InventoryCreateRequest = {
       name,
-      quantity: quantity === "" ? undefined : Number(quantity),
-      unit: unit || undefined,
+      category,
+      quantity,
+      unit,
       expiry_date: expiryDate || undefined,
-      category: category || undefined,
+      notes: notes || undefined,
     };
 
     try {
-      const res = await createInventoryItem(payload);
-      setResult(`Created item ${res.id} (${res.name})`);
+      const res = await createInventoryItem(homeId, payload);
+      const created = res[0];
+      setResult(`Created item ${created?.name ?? name}`);
       setName("");
-      setQuantity("");
-      setUnit("");
+      setQuantity(1);
+      setUnit("pcs");
       setExpiryDate("");
-      setCategory("");
+      setCategory("kitchen");
+      setNotes("");
+      onCreated?.();
     } catch (err: any) {
       if (String(err).includes("401") || String(err).toLowerCase().includes("unauthorized")) {
         clearToken();
@@ -60,11 +90,27 @@ export default function AddInventory({ onLogout }: { onLogout: () => void }) {
         </div>
 
         <div>
+          <label>Expiry Date</label>
+          <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+        </div>
+
+        <div>
+          <label>Category</label>
+          <select value={category} onChange={(e) => setCategory(e.target.value as InventoryCategory)}>
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label>Quantity</label>
           <input
             type="number"
             value={quantity}
-            onChange={(e) => setQuantity(e.target.value === "" ? "" : Number(e.target.value))}
+            onChange={(e) => setQuantity(e.target.value === "" ? 0 : Number(e.target.value))}
             min={0}
           />
         </div>
@@ -75,13 +121,8 @@ export default function AddInventory({ onLogout }: { onLogout: () => void }) {
         </div>
 
         <div>
-          <label>Expiry Date</label>
-          <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-        </div>
-
-        <div>
-          <label>Category</label>
-          <input value={category} onChange={(e) => setCategory(e.target.value)} />
+          <label>Notes</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </div>
 
         <div style={{ marginTop: 12 }}>

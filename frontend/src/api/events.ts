@@ -26,7 +26,7 @@ export async function createEvent(payload: EventCreateRequest): Promise<EventCre
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `bearer ${token}` } : {}),
     },
     body: JSON.stringify(payload),
   });

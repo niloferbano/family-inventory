@@ -1,21 +1,33 @@
 import { API_BASE, getToken } from "./auth";
 
+export type InventoryCategory = "kitchen" | "bathroom" | "cleaning" | "other";
+
 export interface InventoryCreateRequest {
   name: string;
-  quantity?: number;
-  unit?: string;
+  category: InventoryCategory;
+  quantity: number;
+  unit: string;
   expiry_date?: string; // ISO date yyyy-mm-dd
   notes?: string;
-  category?: string;
-  home_id?: string;
 }
 
-export interface InventoryCreateResponse {
+export interface InventoryItem {
   id: string;
   name: string;
-  quantity?: number;
+  category: InventoryCategory;
+  quantity: number;
+  unit: string;
   expiry_date?: string;
-  created_at?: string;
+  notes?: string;
+  home_id: string;
+}
+
+export interface PaginatedInventoryResponse {
+  count: number;
+  total_pages: number;
+  next: string | null;
+  previous: string | null;
+  results: InventoryItem[];
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -26,15 +38,29 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function createInventoryItem(payload: InventoryCreateRequest): Promise<InventoryCreateResponse> {
+export async function listInventoryItems(homeId: string): Promise<PaginatedInventoryResponse> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}/inventory/items`, {
+  const res = await fetch(`${API_BASE}/inventory/${homeId}`, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `bearer ${token}` } : {}),
+    },
+  });
+  return handleResponse<PaginatedInventoryResponse>(res);
+}
+
+export async function createInventoryItem(
+  homeId: string,
+  payload: InventoryCreateRequest
+): Promise<InventoryItem[]> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/inventory/${homeId}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `bearer ${token}` } : {}),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify([payload]),
   });
-  return handleResponse<InventoryCreateResponse>(res);
+  return handleResponse<InventoryItem[]>(res);
 }

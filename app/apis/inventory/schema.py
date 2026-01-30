@@ -2,8 +2,7 @@ from datetime import date
 from enum import StrEnum
 from uuid import UUID
 
-from fastapi import Query
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.apis.inventory.types import InventoryCategory
 from app.core.database.base import HomeId
@@ -50,14 +49,10 @@ class ExpiryFilter(StrEnum):
     EXPIRING_SOON = "expiring_soon"
 
 
-class InventoryFilters(BaseModel):
-    def __init__(
-        self,
-        category: list[InventoryCategory] | None = Query(default=None),
-        expiry: ExpiryFilter | None = Query(default=None),
-        days: int = Query(default=7, ge=1, le=365),
-    ):
-        super().__init__(category=category, expiry=expiry, days=days)
+class InventoryFilters(BaseApiSchema):
+    category: list[InventoryCategory] | None = None
+    expiry: ExpiryFilter | None = None
+    days: int = Field(default=7, ge=1, le=365)
 
     @model_validator(mode="after")
     def validate_days_usage(self):

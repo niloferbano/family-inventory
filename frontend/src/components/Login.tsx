@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { setToken, loginRequest } from "../api/auth";
+import { login, saveToken } from "../api/auth";
 
 type Props = {
   onLogin: () => void;
 };
 
 export default function Login({ onLogin }: Props) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,11 +16,11 @@ export default function Login({ onLogin }: Props) {
     setError(null);
     setLoading(true);
     try {
-      const token = await loginRequest(username, password);
-      setToken(typeof token === "string" ? token : JSON.stringify(token));
+      const token = await login(email, password);
+      saveToken(token.access_token);
       onLogin();
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err?.message ?? "Login failed");
     } finally {
       setLoading(false);
     }
@@ -29,12 +29,22 @@ export default function Login({ onLogin }: Props) {
   return (
     <form onSubmit={submit} style={{ maxWidth: 360, margin: "24px auto" }}>
       <div>
-        <label>Username</label>
-        <input value={username} onChange={(e) => setUsername(e.target.value)} />
+        <label>Email</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
       </div>
       <div>
         <label>Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
       </div>
       {error && <div style={{ color: "red" }}>{error}</div>}
       <button type="submit" disabled={loading}>

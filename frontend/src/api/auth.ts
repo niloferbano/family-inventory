@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000/api/v1";
+export const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 
 export interface LoginResponse {
   access_token: string;
@@ -24,34 +24,42 @@ export async function login(email: string, password: string): Promise<LoginRespo
 
 export function saveToken(token: string) {
   localStorage.setItem("auth_token", token);
+  localStorage.removeItem("token");
+  localStorage.removeItem("access_token");
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem("token");
-}
+  const raw =
+    localStorage.getItem("auth_token") ??
+    localStorage.getItem("token") ??
+    localStorage.getItem("access_token");
 
-export function setToken(token: string) {
-  localStorage.setItem("token", token);
+  if (!raw) {
+    return null;
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+    return trimmed.slice(1, -1);
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed.access_token === "string") {
+      return parsed.access_token;
+    }
+  } catch {
+    // Not JSON, fall through to return raw string.
+  }
+
+  return raw;
 }
 
 export function clearToken() {
+  localStorage.removeItem("auth_token");
   localStorage.removeItem("token");
-}
-
-export async function loginRequest(username: string, password: string) {
-  // Update this path if your backend uses a different login route.
-  const res = await fetch("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (!res.ok) {
-    const payload = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(payload.detail || "Login failed");
-  }
-
-  const data = await res.json();
-  // Expecting { access_token: '...' } or { token: '...' }
-  return data.access_token ?? data.token ?? data;
+  localStorage.removeItem("access_token");
 }
