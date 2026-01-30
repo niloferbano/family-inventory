@@ -46,6 +46,15 @@ class NotificationResponse(BaseApiSchema):
     created_at: datetime
 
 
+class NotificationEventOut(BaseApiSchema):
+    event_id: UUID
+    source: str
+    event_type: str
+    subject: str | None = None
+    message: str
+    created_at: datetime
+
+
 class SubscriptionCreate(BaseApiSchema):
     home_id: HomeId
     topic: str = Field(

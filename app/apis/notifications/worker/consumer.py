@@ -11,7 +11,8 @@ from aio_pika import IncomingMessage
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.types import NotificationChannel
-from app.apis.notifications.worker.channels import ChannelSender, LogSender
+from app.apis.notifications.worker.channels import (ChannelSender, InAppSender,
+                                                    LogSender)
 from app.apis.notifications.worker.handlers import (
     build_failure_results_for_claimed, finalize_delivery_results,
     prepare_event_deliveries, send_claimed_deliveries)
@@ -69,6 +70,7 @@ class NotificationWorker:
         # configured senders
         self.senders: dict[NotificationChannel, ChannelSender] = {
             NotificationChannel.LOG: LogSender(),
+            NotificationChannel.PUSH: InAppSender(),
         }
 
     async def connect(self) -> None:

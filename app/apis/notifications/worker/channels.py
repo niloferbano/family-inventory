@@ -49,3 +49,27 @@ class LogSender:
             },
         )
         return "logged"
+
+
+@dataclass
+class InAppSender:
+    channel: NotificationChannel = NotificationChannel.PUSH
+
+    async def send(
+        self,
+        *,
+        recipient: str,
+        subject: str | None,
+        message: str,
+        headers: Mapping[str, Any] | None = None,
+    ) -> str:
+        logger.info(
+            "[NOTIFY][PUSH]",
+            {
+                "recipient": recipient,
+                "subject": subject,
+                "message": message,
+                "headers": dict(headers or {}),
+            },
+        )
+        return "in_app"

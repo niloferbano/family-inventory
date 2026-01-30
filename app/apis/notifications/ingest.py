@@ -113,6 +113,9 @@ class NotificationIngestService:
             phone = target.get("phone") or getattr(user, "phone", None)
             return NotificationRecipientType.PHONE, phone
 
+        if channel == NotificationChannel.PUSH:
+            return NotificationRecipientType.IN_APP_USER, str(getattr(user, "id", ""))
+
         if channel == NotificationChannel.LOG:
             return NotificationRecipientType.LOG, "stdout"
 

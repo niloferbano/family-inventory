@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Login from "./components/Login";
 import InventoryHome from "./components/InventoryHome";
 import { getToken, clearToken } from "./api/auth";
+import NotificationBell from "./components/NotificationBell";
 
 export default function App() {
   const navigate = useNavigate();
@@ -31,11 +32,14 @@ export default function App() {
         }}
       >
         <h2 style={{ margin: 0 }}>Family Inventory</h2>
-        {!authed && (
-          <Link to="/login" style={{ textDecoration: "none" }}>
-            Log in
-          </Link>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {authed && <NotificationBell onLogout={onLogout} />}
+          {!authed && (
+            <Link to="/login" style={{ textDecoration: "none" }}>
+              Log in
+            </Link>
+          )}
+        </div>
       </header>
 
       <main>
