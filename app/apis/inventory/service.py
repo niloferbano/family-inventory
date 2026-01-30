@@ -6,6 +6,8 @@ from math import ceil
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.apis.homes.exceptions import HomeNotFound
+from app.apis.homes.repository import HomeRepository
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.inventory.exceptions import (InventoryAccessDenied,
                                            InventoryItemNameConflict)
@@ -31,12 +33,16 @@ class InventoryService:
         self.current_user = current_user
         self.inventory_repo = InventoryRepository(session=session)
         self.home_user_repo = HomeUserRepository(session=session)
+        self.home_repo = HomeRepository(session=session)
 
     async def add_items(
         self,
         home_id: HomeId,
         items: list[InventoryCreateRequest],
     ) -> list[InventoryCreateResponse]:
+        home = await self.home_repo.get_by_id(home_id)
+        if not home:
+            raise HomeNotFound(home_id=str(home_id))
         is_owner = await self.home_user_repo.user_is_owner(
             self.current_user.id, home_id
         )

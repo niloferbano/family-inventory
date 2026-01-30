@@ -8,7 +8,7 @@ from app.core.database.base import UserId
 from app.core.database.session import get_session
 from app.iam.token_service import TokenService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/users/login")
 
 
 async def get_current_user(
@@ -20,13 +20,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token expired",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": "bearer"},
         )
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": "bearer"},
         )
 
     user_id = payload.user_id

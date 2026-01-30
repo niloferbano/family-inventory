@@ -21,6 +21,12 @@ class UserRepository:
     async def get_by_id(self, user_id: UserId) -> User | None:
         return await self.session.get(User, user_id)
 
+    async def get_users_by_ids(self, user_ids: list[UserId]) -> list[User]:
+        if not user_ids:
+            return []
+        stmt = sa.select(User).where(User.id.in_(user_ids))
+        return list((await self.session.execute(stmt)).scalars().all())
+
     def get_all_query(self) -> sa.Select:
         return sa.select(User)
 

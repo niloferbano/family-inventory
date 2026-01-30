@@ -27,6 +27,8 @@ httpx = "^0.28.1"
 alembic = "^1.17.2"
 psycopg2-binary = "^2.9.11"
 aio-pika = "^9.5.8"
+colorlog = "^6.10.1"
+structlog = "^25.5.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2"

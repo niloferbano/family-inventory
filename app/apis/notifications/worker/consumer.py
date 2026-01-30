@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import socket
 import uuid
 from dataclasses import dataclass, field
@@ -16,8 +15,10 @@ from app.apis.notifications.worker.channels import ChannelSender, LogSender
 from app.apis.notifications.worker.handlers import (
     build_failure_results_for_claimed, finalize_delivery_results,
     prepare_event_deliveries, send_claimed_deliveries)
+from app.core.logging import configure_logging, get_logger
 
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 ## NOTES : Move worker config to env/config later
 

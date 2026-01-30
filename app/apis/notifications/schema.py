@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.apis.notifications.types import NotificationChannel
+from app.core.database.base import HomeId, UserId
 from app.schemas_base.base import BaseApiSchema
 
 
@@ -43,3 +44,30 @@ class NotificationResponse(BaseApiSchema):
     accepted: bool
     deliveries: list[NotificationDeliveryResult]
     created_at: datetime
+
+
+class SubscriptionCreate(BaseApiSchema):
+    home_id: HomeId
+    topic: str = Field(
+        ..., min_length=1, max_length=200
+    )  # e.g. inventory.item.expired or inventory.item.*
+    channel: NotificationChannel
+    enabled: bool = True
+
+
+class SubscriptionUpdate(BaseApiSchema):
+    topic: str | None = Field(default=None, min_length=1, max_length=200)
+    channel: NotificationChannel | None = None
+    enabled: bool | None = None
+
+
+class SubscriptionOut(BaseApiSchema):
+    id: UUID
+    home_id: HomeId
+    user_id: UserId
+    topic: str
+    channel: NotificationChannel
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None

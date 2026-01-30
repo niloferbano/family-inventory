@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     NOTIFICATION_DLX: ClassVar[str] = "notifications.dlx"
     NOTIFICATION_DLQ: ClassVar[str] = "notifications.dlq"
     NOTIFICATION_ROUTING_KEY: ClassVar[str] = "notifications.#"
+    BROKER_MANAGED_RETRIES: bool = False
 
 
 settings = Settings()

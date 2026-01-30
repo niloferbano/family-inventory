@@ -32,6 +32,32 @@
         "PYTHONPATH": "${workspaceFolder}"
       },
       "console": "integratedTerminal"
-    }
+    },
+        {
+            "name": "Job: Notification Worker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.apis.notifications.worker",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Job: Inventory Expiry Scanner",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.jobs.inventory_expiry_job",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--days", "7",
+                "--limit", "100"
+            ]
+        }
   ]
 }

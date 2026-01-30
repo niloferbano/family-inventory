@@ -1,0 +1,22 @@
+{
+  "name": "frontend",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "npm run dev",
+    "build:deploy": "npm run build && rm -rf ../app/web/* && cp -R dist/* ../app/web/"
+  },
+  "devDependencies": {
+    "@types/node": "^25.1.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.0"
+  }
+}

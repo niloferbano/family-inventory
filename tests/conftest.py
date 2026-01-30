@@ -80,7 +80,7 @@ async def auth_headers(mock_db):
         )
 
         token = TokenService.create_access_token(payload)
-        return {"Authorization": f"Bearer {token}"}
+        return {"Authorization": f"bearer {token}"}
 
 
 @pytest_asyncio.fixture

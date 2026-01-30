@@ -1,6 +1,6 @@
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
-from time import timezone
+from datetime import date, datetime, timedelta, timezone
+from uuid import uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -126,25 +126,36 @@ class InventoryRepository:
             )
         else:
             raise ValueError("invalid alert_type")
-        candidates = (
-            sa.select(
-                InventoryItem.id.label("inventory_item_id"),
-                sa.literal(
-                    alert_type, type_=InventoryExpiryAlert.alert_type.type
-                ).label("alert_type"),
-                sa.literal(today, type_=sa.Date()).label("alert_date"),
-            )
-            .where(*where_clauses)
-            .order_by(InventoryItem.expiry_date.asc(), InventoryItem.created_at.asc())
-            .limit(limit)
+        candidate_ids = list(
+            (
+                await self.session.execute(
+                    sa.select(InventoryItem.id)
+                    .where(*where_clauses)
+                    .order_by(
+                        InventoryItem.expiry_date.asc(),
+                        InventoryItem.created_at.asc(),
+                    )
+                    .limit(limit)
+                )
+            ).scalars()
         )
+
+        if not candidate_ids:
+            return []
+
+        rows = [
+            {
+                "id": uuid4(),
+                "inventory_item_id": item_id,
+                "alert_type": alert_type,
+                "alert_date": today,
+            }
+            for item_id in candidate_ids
+        ]
 
         insert_stmt = (
             pg_insert(InventoryExpiryAlert)
-            .from_select(
-                ["inventory_item_id", "alert_type", "alert_date"],
-                candidates,
-            )
+            .values(rows)
             .on_conflict_do_nothing(constraint="uq_item_alert_once_per_day")
             .returning(InventoryExpiryAlert.id)
         )
@@ -185,10 +196,11 @@ class InventoryRepository:
             )
             .limit(limit)
         )
-
+        print("#" * 8 + "Fetch unpublished alerts with items" + "#" * 8)
         stmt = stmt.with_for_update(skip_locked=True)
 
         rows = (await self.session.execute(stmt)).all()
+        print(rows)
         return [(alert, item) for alert, item in rows]
 
     async def mark_alerts_published(
