@@ -11,6 +11,7 @@ from app.apis.notifications.worker.consumer import (NotificationWorker,
 from app.apis.notifications.worker.sweeper import run_sweeper_loop
 from app.core.configs.config import settings
 from app.core.database.session import get_db
+from app.core.logging import configure_logging
 
 
 async def main() -> None:
@@ -23,18 +24,22 @@ async def main() -> None:
 
     cfg = WorkerConfig(
         amqp_url=settings.RABBITMQ_URL,
-        exchange_name=settings.NOTIFICATION_EXCHANGE,  # must match publisher
-        queue_name=settings.NOTIFICATION_QUEUE,  # e.g. "notifications.q"
-        bindings=[
-            "inventory.item.*",  # consume inventory expiry events
-            # add more patterns later
-        ],
+        exchange_name=settings.NOTIFICATION_EXCHANGE,
+        queue_name=settings.NOTIFICATION_QUEUE,
+        bindings=settings.notification_bindings_list(),
+        dlx_name=settings.NOTIFICATION_DLX,
+        dlq_name=settings.NOTIFICATION_DLQ,
+        dlq_routing_key=settings.NOTIFICATION_DLQ_ROUTING_KEY,
+        retry_exchange_name=settings.NOTIFICATION_RETRY_EXCHANGE,
+        retry_rk_30s=settings.NOTIFICATION_RETRY_ROUTING_KEY_30S,
+        retry_return_topic=settings.NOTIFICATION_RETRY_RETURN_TOPIC,
         prefetch=20,
         max_retries=5,
+        use_broker_retries=settings.BROKER_MANAGED_RETRIES,
     )
 
     worker = NotificationWorker(cfg=cfg, sessionmaker=sessionmaker)
-    await worker.connect()
+    await worker.connect_with_retry()
 
     shutdown = asyncio.Event()
 
@@ -81,4 +86,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    configure_logging()
     asyncio.run(main())

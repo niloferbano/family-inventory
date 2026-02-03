@@ -4,7 +4,7 @@ import asyncio
 import json
 import socket
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import aio_pika
 from aio_pika import IncomingMessage
@@ -15,9 +15,8 @@ from app.apis.notifications.worker.channels import ChannelSender, LogSender
 from app.apis.notifications.worker.handlers import (
     build_failure_results_for_claimed, finalize_delivery_results,
     prepare_event_deliveries, send_claimed_deliveries)
-from app.core.logging import configure_logging, get_logger
+from app.core.logging import get_logger
 
-configure_logging()
 logger = get_logger(__name__)
 
 ## NOTES : Move worker config to env/config later
@@ -26,18 +25,21 @@ logger = get_logger(__name__)
 @dataclass
 class WorkerConfig:
     amqp_url: str
-    exchange_name: str = "notifications"
-    queue_name: str = "notifications.q"
-
-    bindings: list[str] = field(default_factory=list)
+    exchange_name: str
+    queue_name: str
+    bindings: list[str]
 
     dlx_name: str = "notifications.dlx"
     dlq_name: str = "notifications.dlq"
     dlq_routing_key: str = "dlq"
 
+    retry_exchange_name: str = "notifications.retry"
+    retry_rk_30s: str = "retry.30s"
+    retry_return_topic: str = "inventory.item.retry"
+
     prefetch: int = 20
     max_retries: int = 5
-    base_backoff_s: float = 1.0
+    use_broker_retries: bool = True
 
 
 def _get_retry_count(msg: IncomingMessage) -> int:
@@ -48,11 +50,16 @@ def _get_retry_count(msg: IncomingMessage) -> int:
         return 0
 
 
-def _backoff(cfg: WorkerConfig, retry_count: int) -> float:
-    return min(60.0, cfg.base_backoff_s * (2 ** max(0, retry_count - 1)))
-
-
 class NotificationWorker:
+    """
+    Notification worker.
+
+    Consumes events from RabbitMQ (topic exchange), creates delivery tasks, sends them via
+    configured channel senders, and finalizes delivery state in Postgres.
+
+    Supports broker-managed retries via a retry exchange + TTL retry queues, configured from Settings.
+    """
+
     def __init__(
         self, *, cfg: WorkerConfig, sessionmaker: async_sessionmaker[AsyncSession]
     ):
@@ -61,10 +68,11 @@ class NotificationWorker:
 
         self.worker_id = f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}"
 
-        self._conn: aio_pika.RobustConnection | None = None
+        self._connection: aio_pika.RobustConnection | None = None
         self._channel: aio_pika.RobustChannel | None = None
         self._exchange: aio_pika.Exchange | None = None
         self._dlx: aio_pika.Exchange | None = None
+        self._retry_exchange: aio_pika.Exchange | None = None
 
         # configured senders
         self.senders: dict[NotificationChannel, ChannelSender] = {
@@ -72,8 +80,8 @@ class NotificationWorker:
         }
 
     async def connect(self) -> None:
-        self._conn = await aio_pika.connect_robust(self.cfg.amqp_url)
-        self._channel = await self._conn.channel()
+        self._connection = await aio_pika.connect_robust(self.cfg.amqp_url)
+        self._channel = await self._connection.channel()
         await self._channel.set_qos(prefetch_count=self.cfg.prefetch)
 
         self._exchange = await self._channel.declare_exchange(
@@ -88,22 +96,45 @@ class NotificationWorker:
             durable=True,
         )
 
-        # main queue
-        q = await self._channel.declare_queue(
-            self.cfg.queue_name,
+        self._retry_exchange = await self._channel.declare_exchange(
+            self.cfg.retry_exchange_name,
+            aio_pika.ExchangeType.DIRECT,
             durable=True,
         )
+
+        # main queue
+        q = await self._channel.declare_queue(self.cfg.queue_name, durable=True)
+
         for pattern in self.cfg.bindings or []:
             await q.bind(self._exchange, routing_key=pattern)
 
-        # DLQ
-        dlq = await self._channel.declare_queue(
-            self.cfg.dlq_name,
-            durable=True,
-        )
+        await q.bind(self._exchange, routing_key=self.cfg.retry_return_topic)
+
+        dlq = await self._channel.declare_queue(self.cfg.dlq_name, durable=True)
         await dlq.bind(self._dlx, routing_key=self.cfg.dlq_routing_key)
 
         self._queue = q
+
+    async def connect_with_retry(
+        self,
+        *,
+        initial_delay: float = 1.0,
+        max_delay: float = 30.0,
+    ) -> None:
+        delay = initial_delay
+        while True:
+            try:
+                await self.connect()
+                logger.info("Worker connected to RabbitMQ")
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "RabbitMQ connect failed, retrying in %.1fs: %s", delay, exc
+                )
+                await asyncio.sleep(delay)
+                delay = min(max_delay, delay * 2)
 
     async def close(self) -> None:
         if self._channel and not self._channel.is_closed:
@@ -130,29 +161,25 @@ class NotificationWorker:
             routing_key=self.cfg.dlq_routing_key,
         )
 
-    async def _republish_with_retry(
-        self, msg: IncomingMessage, retry_count: int
+    async def _publish_to_retry_queue(
+        self, msg: IncomingMessage, *, retry_count: int
     ) -> None:
-        assert self._exchange is not None
+        assert self._retry_exchange is not None
+
         headers = dict(msg.headers or {})
         headers["x-retry-count"] = retry_count
-        routing_key = msg.routing_key or (msg.headers or {}).get(
-            "x-original-routing-key"
-        )
-        if not routing_key:
-            await self._send_to_dlq(msg, reason="missing_routing_key_on_retry")
-            return
+        headers.setdefault("x-original-routing-key", msg.routing_key or "")
 
-        await self._exchange.publish(
+        await self._retry_exchange.publish(
             aio_pika.Message(
                 body=msg.body,
                 headers=headers,
-                content_type=msg.content_type,
+                content_type=msg.content_type or "application/json",
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
                 message_id=msg.message_id,
                 correlation_id=msg.correlation_id,
             ),
-            routing_key=routing_key,
+            routing_key=self.cfg.retry_rk_30s,  # "retry.30s"
         )
 
     async def on_message(self, msg: IncomingMessage) -> None:
@@ -167,7 +194,7 @@ class NotificationWorker:
                 amqp_headers = dict(msg.headers or {})
                 headers = {**envelope_headers, **amqp_headers}
 
-                topic = msg.routing_key or ""
+                topic = headers.get("x-original-routing-key") or msg.routing_key or ""
 
                 async with self.sessionmaker() as session:
                     async with session.begin():
@@ -217,6 +244,12 @@ class NotificationWorker:
             except Exception as exc:
                 retry_count += 1
 
+                # IMPORTANT: ensure x-original-topic is preserved for retry-return
+                # even if JSON decoding failed
+                msg.headers = dict(msg.headers or {})
+                msg.headers.setdefault("x-original-topic", msg.routing_key or "")
+                msg.headers["x-retry-count"] = retry_count
+
                 if retry_count > self.cfg.max_retries:
                     logger.exception("DLQ after max retries: %s", exc)
                     await self._send_to_dlq(
@@ -225,13 +258,21 @@ class NotificationWorker:
                     )
                     return
 
-                delay = _backoff(self.cfg, retry_count)
-                logger.exception(
-                    "Retrying in %.1fs (retry=%d): %s", delay, retry_count, exc
-                )
+                if self.cfg.use_broker_retries:
+                    logger.exception(
+                        "Retrying via broker (retry=%d): %s", retry_count, exc
+                    )
+                    await self._publish_to_retry_queue(msg, retry_count=retry_count)
+                    return
 
-                await asyncio.sleep(delay)
+                # fallback to old logic if feature flag is off
+                # delay = _backoff(self.cfg, retry_count)
+                # logger.exception(
+                #     "Retrying in %.1fs (retry=%d): %s", delay, retry_count, exc
+                # )
+                # await asyncio.sleep(delay)
                 await self._republish_with_retry(msg, retry_count=retry_count)
+                return
 
     async def run_forever(self) -> None:
         assert hasattr(self, "_queue")

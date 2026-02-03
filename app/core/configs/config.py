@@ -1,5 +1,3 @@
-from typing import ClassVar
-
 from pydantic_settings import BaseSettings
 
 from app.core.configs.cache_config import CacheConfiguration
@@ -29,13 +27,24 @@ class Settings(BaseSettings):
     )
 
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
+
     NOTIFICATION_EXCHANGE: str = "notifications"
-    NOTIFICATION_ROUTING_KEY: str = "notifications.events"
-    NOTIFICATION_QUEUE: ClassVar[str] = "notifications.q"
-    NOTIFICATION_DLX: ClassVar[str] = "notifications.dlx"
-    NOTIFICATION_DLQ: ClassVar[str] = "notifications.dlq"
-    NOTIFICATION_ROUTING_KEY: ClassVar[str] = "notifications.#"
+    NOTIFICATION_QUEUE: str = "notifications.q"
+    NOTIFICATION_DLX: str = "notifications.dlx"
+    NOTIFICATION_DLQ: str = "notifications.dlq"
+    NOTIFICATION_DLQ_ROUTING_KEY: str = "dlq"
+
+    # consume bindings (comma-separated)
+    NOTIFICATION_BINDINGS: str = "inventory.item.*"
+
+    # broker-managed retry infra
     BROKER_MANAGED_RETRIES: bool = False
+    NOTIFICATION_RETRY_EXCHANGE: str = "notifications.retry"
+    NOTIFICATION_RETRY_ROUTING_KEY_30S: str = "retry.30s"
+    NOTIFICATION_RETRY_RETURN_TOPIC: str = "inventory.item.retry"
+
+    def notification_bindings_list(self) -> list[str]:
+        return [b.strip() for b in self.NOTIFICATION_BINDINGS.split(",") if b.strip()]
 
 
 settings = Settings()

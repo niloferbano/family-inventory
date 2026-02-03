@@ -14,9 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.apis.notifications.ingest import NotificationIngestService
 from app.apis.notifications.models import (NotificationDelivery,
                                            NotificationEvent)
+from app.apis.notifications.service import NotificationRealtimeService
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.apis.notifications.worker.channels import ChannelSender
+from app.core.redis.client import redis_client
+
+realtime_service = NotificationRealtimeService(redis_client)
 
 LEASE_SECONDS = 120
 
@@ -209,7 +213,7 @@ async def prepare_event_deliveries(
     now = _utcnow()
 
     # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
-    ingest = NotificationIngestService(session=session)
+    ingest = NotificationIngestService(session=session, realtime=realtime_service)
     await ingest.handle_inventory_event(topic=topic, payload=payload, headers=headers)
 
     # subject/message should be owned by notifications layer
@@ -338,6 +342,7 @@ async def finalize_delivery_results(
             # clear claim/lock
             locked_by=None,
             lock_expires_at=None,
+            locked_at=None,
         )
     )
 

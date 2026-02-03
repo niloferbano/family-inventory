@@ -8,6 +8,7 @@ from app.apis.homes.router import router as homes_router
 from app.apis.homeuser.router import router as home_user_router
 from app.apis.inventory.router import router as inventory_router
 from app.apis.notifications.brokers import RabbitMQBroker
+from app.apis.notifications.router import router as notification_router
 from app.apis.notifications.subscriptions_router import \
     router as notification_subscriptions_router
 from app.apis.users.router import router as users_router
@@ -48,6 +49,7 @@ app.include_router(router=users_router, prefix=API_PREFIX)
 app.include_router(router=homes_router, prefix=API_PREFIX)
 app.include_router(router=home_user_router, prefix=API_PREFIX)
 app.include_router(router=inventory_router, prefix=API_PREFIX)
+app.include_router(router=notification_router, prefix=API_PREFIX)
 app.include_router(router=notification_subscriptions_router, prefix=API_PREFIX)
 
 register_exception_handlers(app)
