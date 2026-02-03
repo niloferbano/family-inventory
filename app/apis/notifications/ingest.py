@@ -3,13 +3,16 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.apis.notifications.models import (NotificationDelivery,
+from app.apis.notifications.models import (InAppNotification,
+                                           NotificationDelivery,
                                            NotificationEvent)
 from app.apis.notifications.repository import \
     NotificationSubscriptionRepository
+from app.apis.notifications.service import NotificationRealtimeService
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.apis.users.repository import UserRepository
@@ -19,10 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationIngestService:
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        realtime: NotificationRealtimeService | None = None,
+    ):
         self.session = session
         self.sub_repo = NotificationSubscriptionRepository(session)
         self.user_repo = UserRepository(session)
+        self.realtime = realtime
 
     async def handle_inventory_event(
         self, *, topic: str, payload: dict, headers: dict
@@ -34,12 +43,15 @@ class NotificationIngestService:
         event_id = NotificationEventId(UUID(payload["event_id"]))
         home_id = HomeId(UUID(payload["home_id"]))
 
+        subject = self._subject(topic, payload)
+        message = self._message(topic, payload)
+
         event = NotificationEvent(
             id=event_id,
             source="inventory",
             event_type=topic,
-            subject=self._subject(topic, payload),
-            message=self._message(topic, payload),
+            subject=subject,
+            message=message,
             recipients={},
         )
 
@@ -71,6 +83,7 @@ class NotificationIngestService:
         user_by_id = {u.id: u for u in users}
 
         deliveries: list[NotificationDelivery] = []
+        inbox_rows: list[dict] = []
         for s in subs:
             user = user_by_id.get(s.user_id)
             if not user:
@@ -83,6 +96,18 @@ class NotificationIngestService:
             if not recipient:
                 continue
 
+            if s.channel in (NotificationChannel.IN_APP, NotificationChannel.PUSH):
+                inbox_rows.append(
+                    {
+                        "event_id": event.id,
+                        "user_id": s.user_id,
+                        "home_id": home_id,
+                        "subject": subject,
+                        "message": message,
+                    }
+                )
+                continue
+
             deliveries.append(
                 NotificationDelivery(
                     event_id=event.id,
@@ -92,6 +117,27 @@ class NotificationIngestService:
                     status=DeliveryStatus.PENDING,
                 )
             )
+
+        if inbox_rows:
+            stmt = (
+                pg_insert(InAppNotification)
+                .values(inbox_rows)
+                .on_conflict_do_nothing(constraint="uq_notification_inbox_event_user")
+                .returning(InAppNotification)
+            )
+            result = await self.session.execute(stmt)
+            rows = list(result.scalars().all())
+            logger.info("INGEST created inbox rows=%d event_id=%s", len(rows), event_id)
+            if self.realtime and rows:
+                for row in rows:
+                    try:
+                        await self.realtime.publish_inapp_from_row(row=row)
+                    except Exception:
+                        logger.exception(
+                            "INGEST realtime publish failed event_id=%s user_id=%s",
+                            row.event_id,
+                            row.user_id,
+                        )
 
         if deliveries:
             self.session.add_all(deliveries)
@@ -115,6 +161,9 @@ class NotificationIngestService:
 
         if channel == NotificationChannel.LOG:
             return NotificationRecipientType.LOG, "stdout"
+
+        if channel in (NotificationChannel.IN_APP, NotificationChannel.PUSH):
+            return NotificationRecipientType.IN_APP_USER, str(getattr(user, "id", ""))
 
         return None, None
 

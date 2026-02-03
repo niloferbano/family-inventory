@@ -7,6 +7,7 @@ class NotificationChannel(StrEnum):
     SMS = "sms"
     PUSH = "push"
     LOG = "log"
+    IN_APP = "inapp"
 
 
 class NotificationRecipientType(StrEnum):

@@ -46,7 +46,7 @@ class NotificationResponse(BaseApiSchema):
     created_at: datetime
 
 
-class SubscriptionCreate(BaseApiSchema):
+class SubscriptionCreateRequest(BaseApiSchema):
     home_id: HomeId
     topic: str = Field(
         ..., min_length=1, max_length=200
@@ -71,3 +71,14 @@ class SubscriptionOut(BaseApiSchema):
     created_at: datetime
     updated_at: datetime | None = None
     deleted_at: datetime | None = None
+
+
+class InAppNotificationOut(BaseApiSchema):
+
+    id: UUID
+    event_id: UUID
+    home_id: UUID
+    subject: str | None
+    message: str
+    read_at: datetime | None
+    created_at: datetime

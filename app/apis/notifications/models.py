@@ -145,6 +145,51 @@ class NotificationDelivery(SQLBase, TimeStampMixin):
     )
 
 
+class InAppNotification(SQLBase, TimeStampMixin):
+    __tablename__ = "in_app_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        nullable=False,
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notification_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    home_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("homes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subject: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
+    __table_args__ = (
+        Index("ix_notification_inbox_user_read", "user_id", "read_at"),
+        UniqueConstraint(
+            "event_id",
+            "user_id",
+            name="uq_notification_inbox_event_user",
+        ),
+    )
+
+
 class NotificationOutbox(SQLBase, TimeStampMixin):
     __tablename__ = "notification_outbox"
 
