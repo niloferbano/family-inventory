@@ -17,11 +17,33 @@ from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.core.database.base import SQLBase, TimeStampMixin
 
+# Reuse enum types across models so SQLAlchemy doesn't create multiple objects
+# with the same Postgres enum name.
+notification_channel_enum = SAEnum(
+    NotificationChannel,
+    name="notification_channel_enum",
+    values_callable=lambda e: [x.value for x in e],
+    native_enum=True,
+)
+
+notification_recipient_type_enum = SAEnum(
+    NotificationRecipientType,
+    name="notification_recipient_type_enum",
+    values_callable=lambda e: [x.value for x in e],
+    native_enum=True,
+)
+
+notification_delivery_status_enum = SAEnum(
+    DeliveryStatus,
+    name="notification_delivery_status_enum",
+    values_callable=lambda e: [x.value for x in e],
+    native_enum=True,
+)
+
 
 class NotificationEvent(SQLBase, TimeStampMixin):
     __tablename__ = "notification_events"
 
-    # This is your event_id (globally unique)
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -35,7 +57,6 @@ class NotificationEvent(SQLBase, TimeStampMixin):
     subject: Mapped[str | None] = mapped_column(String(200), nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # snapshot of recipients (optional, useful for audit/debug)
     recipients: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
@@ -67,43 +88,21 @@ class NotificationDelivery(SQLBase, TimeStampMixin):
         ForeignKey("notification_events.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        unique=True,
     )
 
-    SAEnum(
-        NotificationChannel,
-        name="notification_channel_enum",
-        values_callable=lambda e: [x.value for x in e],
-        native_enum=True,
-    )
     recipient_type: Mapped[NotificationRecipientType] = mapped_column(
-        SAEnum(
-            NotificationRecipientType,
-            values_callable=lambda e: [x.value for x in e],
-            native_enum=True,
-            name="notification_recipient_type_enum",
-        ),
+        notification_recipient_type_enum,
         nullable=False,
     )
     recipient: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[NotificationChannel] = mapped_column(
-        SAEnum(
-            NotificationChannel,
-            name="notification_channel_enum",
-            values_callable=lambda e: [x.value for x in e],
-            native_enum=True,
-        ),
+        notification_channel_enum,
         nullable=False,
         index=True,
     )
 
     status: Mapped[DeliveryStatus] = mapped_column(
-        SAEnum(
-            DeliveryStatus,
-            name="notification_delivery_status_enum",
-            values_callable=lambda e: [x.value for x in e],
-            native_enum=True,
-        ),
+        notification_delivery_status_enum,
         nullable=False,
         default=DeliveryStatus.PENDING,
         index=True,
@@ -185,7 +184,7 @@ class InAppNotification(SQLBase, TimeStampMixin):
         UniqueConstraint(
             "event_id",
             "user_id",
-            name="uq_notification_inbox_event_user",
+            name="uq_inbox_user_event",
         ),
     )
 
@@ -239,12 +238,7 @@ class NotificationSubscription(SQLBase, TimeStampMixin):
 
     topic: Mapped[str] = mapped_column(String(200), nullable=False)
     channel: Mapped[NotificationChannel] = mapped_column(
-        SAEnum(
-            NotificationChannel,
-            name="notification_channel_enum",
-            values_callable=lambda e: [x.value for x in e],
-            native_enum=True,
-        ),
+        notification_channel_enum,
         nullable=False,
         index=True,
     )
@@ -256,7 +250,10 @@ class NotificationSubscription(SQLBase, TimeStampMixin):
     )
 
     target: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=sa.text("'{}'::jsonb"),
     )
 
     __table_args__ = (

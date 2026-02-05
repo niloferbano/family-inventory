@@ -1,37 +1,33 @@
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.apis.notifications.models import (InAppNotification,
-                                           NotificationDelivery,
+from app.apis.notifications.models import (NotificationDelivery,
                                            NotificationEvent)
 from app.apis.notifications.repository import \
     NotificationSubscriptionRepository
-from app.apis.notifications.service import NotificationRealtimeService
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.apis.users.repository import UserRepository
 from app.core.database.base import HomeId, NotificationEventId
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class NotificationIngestService:
     def __init__(
         self,
         session: AsyncSession,
-        *,
-        realtime: NotificationRealtimeService | None = None,
     ):
         self.session = session
         self.sub_repo = NotificationSubscriptionRepository(session)
         self.user_repo = UserRepository(session)
-        self.realtime = realtime
 
     async def handle_inventory_event(
         self, *, topic: str, payload: dict, headers: dict
@@ -82,8 +78,7 @@ class NotificationIngestService:
         users = await self.user_repo.get_users_by_ids(user_ids)
         user_by_id = {u.id: u for u in users}
 
-        deliveries: list[NotificationDelivery] = []
-        inbox_rows: list[dict] = []
+        delivery_rows: list[dict] = []
         for s in subs:
             user = user_by_id.get(s.user_id)
             if not user:
@@ -93,62 +88,42 @@ class NotificationIngestService:
             target = getattr(s, "target", None)
 
             recipient_type, recipient = self._resolve_recipient(s.channel, user, target)
-            if not recipient:
+            if not recipient_type or not recipient:
                 continue
 
-            if s.channel in (NotificationChannel.IN_APP, NotificationChannel.PUSH):
-                inbox_rows.append(
-                    {
-                        "event_id": event.id,
-                        "user_id": s.user_id,
-                        "home_id": home_id,
-                        "subject": subject,
-                        "message": message,
-                    }
-                )
-                continue
-
-            deliveries.append(
-                NotificationDelivery(
-                    event_id=event.id,
-                    channel=s.channel,
-                    recipient_type=recipient_type,
-                    recipient=recipient,
-                    status=DeliveryStatus.PENDING,
-                )
+            # Create a delivery row for every channel (including IN_APP).
+            # ChannelSender implementations decide what “send” means per channel.
+            delivery_rows.append(
+                {
+                    "event_id": event.id,
+                    "channel": s.channel,
+                    "recipient_type": recipient_type,
+                    "recipient": recipient,
+                    "status": DeliveryStatus.PENDING,
+                }
             )
 
-        if inbox_rows:
+        if delivery_rows:
             stmt = (
-                pg_insert(InAppNotification)
-                .values(inbox_rows)
-                .on_conflict_do_nothing(constraint="uq_notification_inbox_event_user")
-                .returning(InAppNotification)
+                pg_insert(NotificationDelivery)
+                .values(delivery_rows)
+                .on_conflict_do_update(
+                    constraint="uq_delivery_per_target",
+                    # idempotent: keep the existing row, just bump updated_at
+                    set_={"updated_at": sa.func.now()},
+                )
             )
-            result = await self.session.execute(stmt)
-            rows = list(result.scalars().all())
-            logger.info("INGEST created inbox rows=%d event_id=%s", len(rows), event_id)
-            if self.realtime and rows:
-                for row in rows:
-                    try:
-                        await self.realtime.publish_inapp_from_row(row=row)
-                    except Exception:
-                        logger.exception(
-                            "INGEST realtime publish failed event_id=%s user_id=%s",
-                            row.event_id,
-                            row.user_id,
-                        )
-
-        if deliveries:
-            self.session.add_all(deliveries)
-            await self.session.flush()
+            await self.session.execute(stmt)
+            # rowcount can be -1 on some drivers; log input size instead.
             logger.info(
-                "INGEST created deliveries=%d event_id=%s", len(deliveries), event_id
+                "INGEST upserted deliveries=%d event_id=%s",
+                len(delivery_rows),
+                event_id,
             )
 
     def _resolve_recipient(
         self, channel: NotificationChannel, user, target: dict | None
-    ):
+    ) -> tuple[NotificationRecipientType | None, str | None]:
         target = target or {}
 
         if channel == NotificationChannel.EMAIL:

@@ -5,14 +5,14 @@ from jose import ExpiredSignatureError, JWTError
 from app.apis.users.exceptions import InvalidCredentials
 from app.apis.users.repository import UserRepository
 from app.core.database.base import UserId
-from app.core.database.session import get_session
+from app.core.database.session import get_async_session
 from app.iam.token_service import TokenService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/users/login")
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), session=Depends(get_session)
+    token: str = Depends(oauth2_scheme), session=Depends(get_async_session)
 ):
     try:
         payload = TokenService.decode_token(token)
