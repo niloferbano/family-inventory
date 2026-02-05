@@ -18,9 +18,31 @@ from app.apis.notifications.service import NotificationRealtimeService
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.apis.notifications.worker.channels import ChannelSender
-from app.core.redis.client import redis_client
 
-realtime_service = NotificationRealtimeService(redis_client)
+_realtime_service: NotificationRealtimeService | None = None
+
+
+def _get_realtime_service() -> NotificationRealtimeService | None:
+    """Return a lazily-initialized realtime service.
+
+    We keep this lazy so importing the worker/handlers module doesn't require
+    Redis to be available (e.g., during migrations/tests or when realtime push
+    is disabled).
+    """
+    global _realtime_service
+    if _realtime_service is not None:
+        return _realtime_service
+
+    try:
+        # Import here to avoid Redis client initialization at module import time.
+        from app.core.redis.client import redis_client  # local import
+
+        _realtime_service = NotificationRealtimeService(redis_client)
+        return _realtime_service
+    except Exception:
+        # If Redis isn't configured/available, realtime is simply disabled.
+        return None
+
 
 LEASE_SECONDS = 120
 
@@ -85,10 +107,6 @@ def _message_for(topic: str, payload: dict[str, Any]) -> str:
         )
     # fallback for other topics
     return payload.get("message") or f"Event received: {topic}"
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _parse_event_id(payload: dict[str, Any], headers: dict[str, Any]) -> UUID:
@@ -213,7 +231,9 @@ async def prepare_event_deliveries(
     now = _utcnow()
 
     # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
-    ingest = NotificationIngestService(session=session, realtime=realtime_service)
+    ingest = NotificationIngestService(
+        session=session, realtime=_get_realtime_service()
+    )
     await ingest.handle_inventory_event(topic=topic, payload=payload, headers=headers)
 
     # subject/message should be owned by notifications layer

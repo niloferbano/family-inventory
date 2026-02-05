@@ -1,3 +1,5 @@
+import asyncio
+import random
 from functools import lru_cache
 from typing import AsyncGenerator, Type
 
@@ -9,15 +11,22 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.configs.config import settings
 from app.core.database.base import SQLBase
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class DBManager:
     def __init__(self, model_base: Type[DeclarativeBase], db_url: str | URL, **kwargs):
         self.model_base = model_base
-        print("✅ CONNECTING TO DATABASE:", db_url)
+        logger.info("✅ CONNECTING TO DATABASE:", db_url)
         # MUST specify future=True for async
         self.engine: AsyncEngine = create_async_engine(
-            db_url, echo=True, future=True, **kwargs
+            url=db_url,
+            echo=settings.DEBUG,
+            future=True,
+            pool_pre_ping=True,
+            pool_size=10,
         )
 
         # async sessionmaker MUST use class_=AsyncSession
@@ -28,7 +37,9 @@ class DBManager:
         )
 
     async def connect(self):
+        await asyncio.sleep(random.uniform(0, 0.5))
         conn = await self.engine.connect()
+        await self.ping()
         await conn.close()
 
     async def disconnect(self):
@@ -70,11 +81,11 @@ def get_db() -> DBManager:
         model_base=SQLBase,
         db_url=settings.DATABASE_URL,
         pool_size=10,
-        # max_overflow=20,
+        max_overflow=5,
     )
 
 
-async def get_session(
+async def get_async_session(
     db: DBManager = Depends(get_db),
 ) -> AsyncGenerator[AsyncSession, None]:
     async with db.sessionmaker() as session:

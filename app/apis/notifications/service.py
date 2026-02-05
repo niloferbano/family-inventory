@@ -220,7 +220,7 @@ class NotificationRealtimeService:
 
     CHANNEL_PREFIX = "notifications.inapp."
 
-    def __init__(self, redis: "Redis | None" = None):
+    def __init__(self, redis: Redis | None = None):
         self.redis = redis
 
     def _channel_for_user(self, user_id: UUID) -> str:

@@ -8,7 +8,7 @@ from sqlalchemy import text
 from app.apis.users.models import User
 from app.core.configs.config import settings
 from app.core.database.base import SQLBase
-from app.core.database.session import DBManager, get_db, get_session
+from app.core.database.session import DBManager, get_async_session, get_db
 from app.iam.schema import JWTBasePayload
 from app.iam.token_service import TokenService
 from app.main import app
@@ -42,7 +42,7 @@ async def mock_db(worker_schema):
         async with mock_db.sessionmaker() as session:
             yield session
 
-    app.dependency_overrides[get_session] = _get_test_session
+    app.dependency_overrides[get_async_session] = _get_test_session
 
     try:
         yield mock_db
