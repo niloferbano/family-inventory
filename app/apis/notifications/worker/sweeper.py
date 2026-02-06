@@ -16,6 +16,7 @@ from app.apis.notifications.worker.handlers import (
     ClaimedDelivery, build_failure_results_for_claimed,
     claim_deliveries_to_send, finalize_delivery_results,
     send_claimed_deliveries)
+from app.core.database.session import session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ async def sweep_once(
     now = _utcnow()
 
     # 1) find event_ids that have something retryable
-    async with sessionmaker() as session:
+    async with session_scope(sessionmaker) as session:
         async with session.begin():
             event_ids = await _fetch_retry_event_ids(session, now=now, limit=max_events)
 
@@ -80,7 +81,7 @@ async def sweep_once(
     # 2) per-event: claim -> send -> finalize
     for event_id in event_ids:
         # Load event + claim rows in one txn, AND copy subject/message safely
-        async with sessionmaker() as session:
+        async with session_scope(sessionmaker) as session:
             async with session.begin():
                 event = await session.get(NotificationEvent, event_id)
                 if not event:
@@ -128,7 +129,7 @@ async def sweep_once(
             send_exc = exc
             results = build_failure_results_for_claimed(claimed_rows, exc)
 
-        async with sessionmaker() as session:
+        async with session_scope(sessionmaker) as session:
             async with session.begin():
                 await finalize_delivery_results(
                     session, worker_id=worker_id, results=results

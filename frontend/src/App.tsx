@@ -4,6 +4,7 @@ import Login from "./components/Login";
 import InventoryHome from "./components/InventoryHome";
 import { getToken, clearToken } from "./api/auth";
 import NotificationBell from "./components/NotificationBell";
+import NotificationSubscriptions from "./components/NotificationSubscriptions";
 
 export default function App() {
   const navigate = useNavigate();
@@ -34,6 +35,11 @@ export default function App() {
         <h2 style={{ margin: 0 }}>Family Inventory</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {authed && <NotificationBell />}
+          {authed && (
+            <Link to="/subscriptions" style={{ textDecoration: "none" }}>
+              Subscriptions
+            </Link>
+          )}
           {!authed && (
             <Link to="/login" style={{ textDecoration: "none" }}>
               Log in
@@ -51,6 +57,12 @@ export default function App() {
           <Route
             path="/"
             element={authed ? <InventoryHome onLogout={onLogout} /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/subscriptions"
+            element={
+              authed ? <NotificationSubscriptions onLogout={onLogout} /> : <Navigate to="/login" replace />
+            }
           />
           <Route path="*" element={<Navigate to={authed ? "/" : "/login"} replace />} />
         </Routes>

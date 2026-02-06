@@ -1,7 +1,8 @@
 import asyncio
 import logging
 from datetime import date
-from uuid import UUID
+
+from sqlalchemy import UUID
 
 from app.apis.inventory.expiry_service import InventoryExpiryService
 from app.apis.inventory.repository import InventoryRepository
@@ -28,10 +29,12 @@ async def run_inventory_expiry_job(
 ) -> None:
     db = get_db()
     broker = broker or LogBroker()
-    await broker.connect()
-    today = date.today()
 
     try:
+        await db.connect()
+        await broker.connect()
+        today = date.today()
+
         # 1) Register alerts (DB transaction) -> returns ALERT IDS (InventoryExpiryAlert.id)
         async with db.begin() as session:
             repo = InventoryRepository(session)
@@ -66,7 +69,7 @@ async def run_inventory_expiry_job(
 
             expiry_service = InventoryExpiryService(
                 session=None, broker=broker
-            )  # publish-only
+            )  # publish-only service, no DB session needed since we fetch rows in a separate txn
             sem = asyncio.Semaphore(CONCURRENCY)
 
             async def _publish_one(
@@ -109,19 +112,33 @@ async def run_inventory_expiry_job(
                 failed_ids: list[InventoryExpiryAlertId] = []
                 failed_err: dict[InventoryExpiryAlertId, str] = {}
 
-                for t in asyncio.as_completed(tasks):
-                    alert_id, exc = await t
-                    if exc is None:
-                        published_ids.append(alert_id)
-                    else:
-                        failed_ids.append(alert_id)
-                        failed_err[alert_id] = f"{type(exc).__name__}: {exc}"
-                        logger.exception(
-                            "Failed to publish %s alert=%s",
-                            alert_type.value,
-                            str(alert_id),
-                            exc_info=exc,
-                        )
+                try:
+                    for t in asyncio.as_completed(tasks):
+                        alert_id, exc = await t
+                        if exc is None:
+                            published_ids.append(alert_id)
+                        else:
+                            failed_ids.append(alert_id)
+                            failed_err[alert_id] = f"{type(exc).__name__}: {exc}"
+                            logger.exception(
+                                "Failed to publish %s alert=%s",
+                                alert_type.value,
+                                str(alert_id),
+                                exc_info=exc,
+                            )
+                except asyncio.CancelledError:
+                    # Ensure in-flight publish tasks are cancelled so we don't leak work.
+                    for t in tasks:
+                        t.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    raise
+                finally:
+                    # Defensive cleanup: in case we exit early due to an exception.
+                    pending = [t for t in tasks if not t.done()]
+                    if pending:
+                        for t in pending:
+                            t.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
 
                 # 3) Mark results (DB txn)
                 async with db.begin() as session:

@@ -1,5 +1,6 @@
 import asyncio
 import random
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import AsyncGenerator, Type
 
@@ -19,7 +20,7 @@ logger = get_logger(__name__)
 class DBManager:
     def __init__(self, model_base: Type[DeclarativeBase], db_url: str | URL, **kwargs):
         self.model_base = model_base
-        logger.info("✅ CONNECTING TO DATABASE:", db_url)
+        logger.info("✅ CONNECTING TO DATABASE: %s", db_url)
         # MUST specify future=True for async
         self.engine: AsyncEngine = create_async_engine(
             url=db_url,
@@ -43,7 +44,7 @@ class DBManager:
         await conn.close()
 
     async def disconnect(self):
-        await self.engine.dispose()
+        await asyncio.shield(self.engine.dispose())
 
     async def ping(self):
         async with self.engine.connect() as conn:
@@ -88,5 +89,17 @@ def get_db() -> DBManager:
 async def get_async_session(
     db: DBManager = Depends(get_db),
 ) -> AsyncGenerator[AsyncSession, None]:
-    async with db.sessionmaker() as session:
+    async with session_scope(db.sessionmaker) as session:
         yield session
+
+
+@asynccontextmanager
+async def session_scope(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
+    session = sessionmaker()
+    try:
+        yield session
+    finally:
+        # Ensure connections are returned to the pool even if cancelled.
+        await asyncio.shield(session.close())

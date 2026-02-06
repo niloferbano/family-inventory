@@ -52,35 +52,48 @@ async def main() -> None:
             loop.add_signal_handler(sig, _request_shutdown)
 
     async def _run_worker() -> None:
-        # Run until we are asked to shut down.
-        worker_task = asyncio.create_task(worker.run_forever())
         try:
-            await shutdown.wait()
-        finally:
-            worker_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await worker_task
+            await worker.run_forever()
+        except asyncio.CancelledError:
+            # allow outer shutdown to control cancellation
+            raise
 
     async def _run_sweeper() -> None:
-        sweeper_task = asyncio.create_task(
-            run_sweeper_loop(
+        try:
+            await run_sweeper_loop(
                 sessionmaker=sessionmaker,
                 senders=worker.senders,
                 worker_id=worker.worker_id,
             )
-        )
-        try:
-            await shutdown.wait()
-        finally:
-            sweeper_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await sweeper_task
+        except asyncio.CancelledError:
+            raise
+
+    worker_task: asyncio.Task | None = None
+    sweeper_task: asyncio.Task | None = None
 
     try:
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(_run_worker())
-            tg.create_task(_run_sweeper())
+            worker_task = tg.create_task(_run_worker())
+            sweeper_task = tg.create_task(_run_sweeper())
+
+            tg.create_task(shutdown.wait())
     finally:
+        # 1) Stop consuming so no new DB work starts
+        with contextlib.suppress(Exception):
+            await worker.stop_consuming()
+
+        # 2) Give in-flight message handlers a chance to finish
+        with contextlib.suppress(Exception):
+            await worker.drain(timeout=10.0)
+
+        # 3) Now cancel background loops (safe: they’re not starting new work)
+        for t in (worker_task, sweeper_task):
+            if t:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
+
+        # 4) Close broker, then DB
         await worker.close()
         await db.disconnect()
 

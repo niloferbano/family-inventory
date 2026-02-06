@@ -32,7 +32,7 @@ class NotificationIngestService:
     async def handle_inventory_event(
         self, *, topic: str, payload: dict, headers: dict
     ) -> None:
-        logger.warning(
+        logger.info(
             "INGEST class=%s module=%s", type(self).__name__, type(self).__module__
         )
 
@@ -79,20 +79,20 @@ class NotificationIngestService:
         user_by_id = {u.id: u for u in users}
 
         delivery_rows: list[dict] = []
+
         for s in subs:
             user = user_by_id.get(s.user_id)
             if not user:
                 continue
 
-            # target is optional (don’t crash if column not added yet)
+            # target is optional
             target = getattr(s, "target", None)
 
             recipient_type, recipient = self._resolve_recipient(s.channel, user, target)
             if not recipient_type or not recipient:
                 continue
 
-            # Create a delivery row for every channel (including IN_APP).
-            # ChannelSender implementations decide what “send” means per channel.
+            # All channels create a delivery task.
             delivery_rows.append(
                 {
                     "event_id": event.id,
@@ -114,7 +114,6 @@ class NotificationIngestService:
                 )
             )
             await self.session.execute(stmt)
-            # rowcount can be -1 on some drivers; log input size instead.
             logger.info(
                 "INGEST upserted deliveries=%d event_id=%s",
                 len(delivery_rows),

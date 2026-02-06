@@ -29,9 +29,13 @@ logger = logging.getLogger(__name__)
 
 class LogBroker(EventBroker):
     async def connect(self) -> None:
+        logger.infor(
+            "LOG BROKER: using LogBroker - events will be logged, not published to a real broker"
+        )
         return
 
     async def close(self) -> None:
+        logger.info("LOG BROKER: closing LogBroker (no-op)")
         return
 
     async def publish(self, event: EventEnvelope) -> None:

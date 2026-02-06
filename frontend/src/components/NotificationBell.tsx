@@ -142,7 +142,7 @@ export default function NotificationBell() {
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload?.type !== "notification.inapp.created") {
+          if (payload?.type !== "notification.in_app.created") {
             return;
           }
           const incoming = payload.data as InAppNotification | undefined;

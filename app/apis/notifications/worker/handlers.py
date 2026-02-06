@@ -11,10 +11,11 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.apis.notifications.ingest import NotificationIngestService
 from app.apis.notifications.models import (NotificationDelivery,
                                            NotificationEvent)
-from app.apis.notifications.service import NotificationRealtimeService
+from app.apis.notifications.services.ingest import NotificationIngestService
+from app.apis.notifications.services.realtime import \
+    NotificationRealtimeService
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.apis.notifications.worker.channels import ChannelSender
@@ -231,9 +232,7 @@ async def prepare_event_deliveries(
     now = _utcnow()
 
     # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
-    ingest = NotificationIngestService(
-        session=session, realtime=_get_realtime_service()
-    )
+    ingest = NotificationIngestService(session=session)
     await ingest.handle_inventory_event(topic=topic, payload=payload, headers=headers)
 
     # subject/message should be owned by notifications layer
@@ -280,6 +279,21 @@ async def send_claimed_deliveries(
     NO DB:
     Send concurrently with limit. Return per-delivery results.
     """
+    # Normalize/ensure topic headers so senders (especially In-App) can rely on them.
+    # We see retry-return and envelope formats in the wild, so accept multiple keys.
+    base_headers = dict(headers)
+    topic = (
+        base_headers.get("topic")
+        or base_headers.get("routing_key")
+        or base_headers.get("x-original-topic")
+        or base_headers.get("x-original-routing-key")
+        or ""
+    )
+    if topic:
+        base_headers.setdefault("topic", topic)
+        base_headers.setdefault("routing_key", topic)
+        base_headers.setdefault("x-original-topic", topic)
+        base_headers.setdefault("x-original-routing-key", topic)
     sem = asyncio.Semaphore(concurrency)
 
     async def _send_one(d: ClaimedDelivery) -> DeliverySendResult:
@@ -298,7 +312,7 @@ async def send_claimed_deliveries(
                     recipient=d.recipient,
                     subject=subject,
                     message=message,
-                    headers=dict(headers),
+                    headers=base_headers,
                 )
                 return DeliverySendResult(
                     delivery_id=d.id,

@@ -11,15 +11,26 @@ from aio_pika import IncomingMessage
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.exceptions import UnprocessableMessageError
+from app.apis.notifications.services.realtime import \
+    NotificationRealtimeService
 from app.apis.notifications.types import NotificationChannel
 from app.apis.notifications.worker.channels import (ChannelSender, InAppSender,
                                                     LogSender)
 from app.apis.notifications.worker.handlers import (
     build_failure_results_for_claimed, finalize_delivery_results,
     prepare_event_deliveries, send_claimed_deliveries)
+from app.core.database.session import session_scope
 from app.core.logging import get_logger
+from app.core.redis.client import redis_client
 
 logger = get_logger(__name__)
+
+
+def _build_realtime_service() -> NotificationRealtimeService | None:
+    try:
+        return NotificationRealtimeService(redis_client)
+    except Exception:
+        return None
 
 
 ## NOTES : Move worker config to env/config later
@@ -92,11 +103,41 @@ class NotificationWorker:
         self._retry_exchange: aio_pika.Exchange | None = None
         self._queue: aio_pika.Queue | None = None
         self._process_sem = asyncio.Semaphore(self.cfg.worker_concurrency)
+        self._consumer_tag: str | None = None
 
+        realtime = _build_realtime_service()
         self.senders: dict[NotificationChannel, ChannelSender] = {
             NotificationChannel.LOG: LogSender(),
-            NotificationChannel.IN_APP: InAppSender(sessionmaker=sessionmaker),
+            NotificationChannel.IN_APP: InAppSender(
+                sessionmaker=sessionmaker,
+                realtime=realtime,
+            ),
         }
+
+    async def stop_consuming(self) -> None:
+        if self._queue is None or self._consumer_tag is None:
+            return
+        await self._queue.cancel(self._consumer_tag)
+        self._consumer_tag = None
+
+    async def drain(self, timeout: float = 10.0) -> None:
+        """
+        Wait until in-flight message processing finishes.
+
+        Uses the worker semaphore: when all permits are available, nothing is running.
+        """
+        if self._process_sem is None:
+            return
+
+        async def _wait_all_free() -> None:
+            # Acquire all permits, then release them back.
+            permits = []
+            for _ in range(self.cfg.worker_concurrency):
+                permits.append(await self._process_sem.acquire())
+            for _ in permits:
+                self._process_sem.release()
+
+        await asyncio.wait_for(_wait_all_free(), timeout=timeout)
 
     async def connect(self) -> None:
         self._connection = await aio_pika.connect_robust(self.cfg.amqp_url)
@@ -146,6 +187,8 @@ class NotificationWorker:
                 await self.connect()
                 logger.info("Worker connected to RabbitMQ")
                 return
+            except asyncio.CancelledError:
+                raise
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -224,7 +267,7 @@ class NotificationWorker:
                 headers.setdefault("x-original-routing-key", topic)
 
                 # 1) Prepare/claim DB work in a transaction.
-                async with self.sessionmaker() as session:
+                async with session_scope(self.sessionmaker) as session:
                     async with session.begin():
                         batch = await prepare_event_deliveries(
                             session,
@@ -263,7 +306,7 @@ class NotificationWorker:
                     results = build_failure_results_for_claimed(claimed, exc)
 
                 # 3) Finalize in DB.
-                async with self.sessionmaker() as session:
+                async with session_scope(self.sessionmaker) as session:
                     async with session.begin():
                         await finalize_delivery_results(
                             session, worker_id=self.worker_id, results=results

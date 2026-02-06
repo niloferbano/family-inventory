@@ -10,13 +10,11 @@ from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 
 from app.apis.notifications.schema import (InAppNotificationOut,
-                                           NotificationRequest,
-                                           NotificationResponse,
                                            SubscriptionCreateRequest,
                                            SubscriptionOut, SubscriptionUpdate)
-from app.apis.notifications.service import (NotificationInboxService,
-                                            NotificationPreferencesService,
-                                            NotificationService)
+from app.apis.notifications.services.inbox import NotificationInboxService
+from app.apis.notifications.services.subscription import \
+    NotificationSubscriptionsService
 from app.apis.users.models import User
 from app.core.database.base import HomeId
 from app.core.database.session import get_db
@@ -28,29 +26,6 @@ from app.iam.websocket_auth import get_current_user_ws
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
-
-
-def _extract_ws_token(websocket: WebSocket) -> str | None:
-    token = websocket.query_params.get("token")
-    if token:
-        return token
-    auth = websocket.headers.get("authorization")
-    if not auth:
-        return None
-    parts = auth.split()
-    if len(parts) == 2 and parts[0].lower() == "bearer":
-        return parts[1]
-    return None
-
-
-@router.post("/", response_model=NotificationResponse)
-async def send_notification(
-    payload: NotificationRequest,
-    db_manager=Depends(get_db),
-):
-    async with db_manager.begin() as session:
-        service = NotificationService(session=session)
-        return await service.send(payload)
 
 
 @router.get("/inbox", response_model=list[InAppNotificationOut])
@@ -106,7 +81,7 @@ async def list_my_subscriptions(
     current_user: User = Depends(get_current_user),
 ):
     async with db_manager.begin() as session:
-        svc = NotificationPreferencesService(session)
+        svc = NotificationSubscriptionsService(session)
         return await svc.list_my_subscriptions(user_id=current_user.id, home_id=home_id)
 
 
@@ -122,7 +97,7 @@ async def create_subscription(
     current_user: User = Depends(get_current_user),
 ):
     async with db_manager.begin() as session:
-        svc = NotificationPreferencesService(session)
+        svc = NotificationSubscriptionsService(session)
         return await svc.create_subscription(user_id=current_user.id, req=req)
 
 
@@ -138,7 +113,7 @@ async def update_subscription(
     current_user: User = Depends(get_current_user),
 ):
     async with db_manager.begin() as session:
-        svc = NotificationPreferencesService(session)
+        svc = NotificationSubscriptionsService(session)
         return await svc.update_subscription(
             user_id=current_user.id,
             subscription_id=subscription_id,
@@ -157,14 +132,14 @@ async def delete_subscription(
     current_user: User = Depends(get_current_user),
 ):
     async with db_manager.begin() as session:
-        svc = NotificationPreferencesService(session)
+        svc = NotificationSubscriptionsService(session)
         await svc.delete_subscription(
             user_id=current_user.id, subscription_id=subscription_id
         )
 
 
 def _user_channel(user_id) -> str:
-    return f"notifications.inapp.{user_id}"
+    return f"notifications.in_app.{user_id}"
 
 
 def _normalize_redis(obj: Any) -> Redis | None:
