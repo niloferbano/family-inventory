@@ -260,3 +260,68 @@ async def test_filter_by_multiple_categories(client, db_session, auth_headers):
     assert res.status_code == 200
     names = {item["name"] for item in res.json()["results"]}
     assert names == {"Shampoo", "Detergent"}
+
+
+@pytest.mark.asyncio
+async def test_owner_can_update_item(client, db_session, auth_headers):
+    home = Home(name="Update Home")
+    db_session.add(home)
+    await db_session.flush()
+    auth_user_id = await _get_auth_user_id(db_session)
+    db_session.add(
+        HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
+    )
+
+    item = InventoryItem(
+        home_id=home.id,
+        created_by=auth_user_id,
+        name="Rice",
+        category=InventoryCategory.KITCHEN,
+        quantity=1,
+    )
+    db_session.add(item)
+    await db_session.commit()
+
+    res = await client.patch(
+        f"/inventory/{home.id}/{item.id}",
+        json={"quantity": 5, "notes": "restock"},
+        headers=auth_headers,
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["quantity"] == 5
+    assert body["notes"] == "restock"
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_item(client, db_session, auth_headers):
+    home = Home(name="Delete Inventory Home")
+    db_session.add(home)
+    await db_session.flush()
+    auth_user_id = await _get_auth_user_id(db_session)
+    db_session.add(
+        HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
+    )
+
+    item = InventoryItem(
+        home_id=home.id,
+        created_by=auth_user_id,
+        name="Old Item",
+        category=InventoryCategory.OTHER,
+        quantity=1,
+    )
+    db_session.add(item)
+    await db_session.commit()
+
+    res = await client.delete(
+        f"/inventory/{home.id}/{item.id}",
+        headers=auth_headers,
+    )
+
+    assert res.status_code == 204
+
+    exists = await db_session.execute(
+        select(InventoryItem.id).where(InventoryItem.id == item.id)
+    )
+    assert exists.scalar_one_or_none() is None

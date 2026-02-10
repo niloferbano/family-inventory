@@ -87,9 +87,8 @@ class NotificationSubscriptionsService:
             sub.enabled = req.enabled
 
         try:
-            async with self.session.begin():
-                self.session.add(sub)
-                await self.session.flush()
+            self.session.add(sub)
+            await self.session.flush()
         except IntegrityError as exc:
             raise DomainConflictError(
                 code=ErrorCode.SUBSCRIPTION_DUPLICATE,
@@ -114,8 +113,8 @@ class NotificationSubscriptionsService:
 
         await self._require_home_member(home_id=sub.home_id, user_id=user_id)
 
-        async with self.session.begin():
-            await self.repo.delete(sub)
+        await self.repo.delete(sub)
+        await self.session.flush()
 
     async def _require_home_member(self, *, home_id: UUID, user_id: UUID) -> None:
         has_access = await self.home_user_repo.user_has_access(

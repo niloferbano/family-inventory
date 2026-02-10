@@ -22,12 +22,16 @@ class DBManager:
         self.model_base = model_base
         logger.info("✅ CONNECTING TO DATABASE: %s", db_url)
         # MUST specify future=True for async
+        engine_kwargs = {
+            "echo": settings.DEBUG,
+            "future": True,
+            "pool_pre_ping": True,
+            "pool_size": 10,
+        }
+        engine_kwargs.update(kwargs)
         self.engine: AsyncEngine = create_async_engine(
             url=db_url,
-            echo=settings.DEBUG,
-            future=True,
-            pool_pre_ping=True,
-            pool_size=10,
+            **engine_kwargs,
         )
 
         # async sessionmaker MUST use class_=AsyncSession
