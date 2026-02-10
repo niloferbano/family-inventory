@@ -93,3 +93,6 @@ class HomeRepository:
         rows = (await self.session.execute(paginated_query)).all()
 
         return rows, total
+
+    async def delete(self, home: Home):
+        await self.session.delete(home)

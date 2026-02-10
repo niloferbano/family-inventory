@@ -137,3 +137,21 @@ class HomeService:
             previous=prev_url,
             results=list(homes.values()),
         )
+
+    async def delete_home(self, home_id: HomeId) -> None:
+        home = await self.home_repo.get_by_id(home_id)
+        if not home:
+            return  # Home doesn't exist, consider it deleted
+
+        # Check if the current user is the owner of the home
+        is_owner = await self.home_user_repo.user_is_owner(
+            home_id=home_id, user_id=self.current_user.id
+        )
+        if not is_owner and not self.current_user.is_admin:
+            raise DomainPermissionError(
+                code=ErrorCode.HOME_PERMISSION_DENIED,
+                message="You do not have permission to delete this home",
+                details={"home_id": str(home_id)},
+            )
+
+        await self.home_repo.delete(home)
