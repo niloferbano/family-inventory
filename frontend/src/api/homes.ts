@@ -15,6 +15,24 @@ export interface HomeSummary {
   members?: HomeMember[];
 }
 
+export interface HomeCreateRequest {
+  name: string;
+}
+
+export interface HomeRead {
+  id: string;
+  name: string;
+  user_type?: UserType;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HomeMemberAddResponse {
+  username: string;
+  home_name: string;
+  user_type: UserType;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     // Attempt to get error details, fallback to status text
@@ -45,4 +63,48 @@ export async function listHomes(): Promise<HomeSummary[]> {
   });
 
   return handleResponse<HomeSummary[]>(res);
+}
+
+export async function createHome(payload: HomeCreateRequest): Promise<HomeRead> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers["Authorization"] = `bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}/homes/`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  return handleResponse<HomeRead>(res);
+}
+
+export async function addHomeMember(
+  homeId: string,
+  payload: { userEmail: string; userType: UserType }
+): Promise<HomeMemberAddResponse> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers["Authorization"] = `bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}/homeuser/${homeId}/users`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      user_email: payload.userEmail,
+      user_type: payload.userType,
+    }),
+  });
+
+  return handleResponse<HomeMemberAddResponse>(res);
 }

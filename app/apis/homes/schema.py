@@ -32,6 +32,8 @@ class GetHomesResponse(BaseApiSchema):
 class GetHomeWithMembersResponse(BaseApiSchema):
     home_id: UUID
     name: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     members: list[GetHomesResponse]
 
 
