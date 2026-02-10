@@ -102,3 +102,22 @@ class HomeUserService:
 
         home_user.user_type = new_role
         await self.session.flush()
+
+    async def remove_user_from_home(self, home_id: HomeId, user_id: int):
+        home = await self.home_repo.get_by_id(home_id)
+        if not home:
+            raise HomeNotFound(home_id)
+
+        is_owner = await self.home_user_repo.user_is_owner(
+            self.current_user.id, home_id
+        )
+
+        if not (self.current_user.is_admin or is_owner):
+            raise HomePermissionDenied(home_id=home_id)
+
+        home_user = await self.home_user_repo.get(user_id=user_id, home_id=home_id)
+        if not home_user:
+            raise TargetUserDoesNotExist(target_user_email="")
+
+        await self.session.delete(home_user)
+        await self.session.flush()
