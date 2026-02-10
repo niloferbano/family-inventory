@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from app.apis.users.models import User
 from app.core.configs.config import settings
@@ -12,6 +13,41 @@ from app.core.database.session import DBManager, get_async_session, get_db
 from app.iam.schema import JWTBasePayload
 from app.iam.token_service import TokenService
 from app.main import app
+
+API_PREFIX = "/api/v1"
+
+
+class ApiClient:
+    def __init__(self, client: AsyncClient):
+        self._client = client
+
+    def _with_prefix(self, url: str) -> str:
+        if isinstance(url, str) and url.startswith("/"):
+            return f"{API_PREFIX}{url}"
+        return url
+
+    async def get(self, url, *args, **kwargs):
+        return await self._client.get(self._with_prefix(url), *args, **kwargs)
+
+    async def post(self, url, *args, **kwargs):
+        return await self._client.post(self._with_prefix(url), *args, **kwargs)
+
+    async def put(self, url, *args, **kwargs):
+        return await self._client.put(self._with_prefix(url), *args, **kwargs)
+
+    async def patch(self, url, *args, **kwargs):
+        return await self._client.patch(self._with_prefix(url), *args, **kwargs)
+
+    async def delete(self, url, *args, **kwargs):
+        return await self._client.delete(self._with_prefix(url), *args, **kwargs)
+
+    async def request(self, method: str, url, *args, **kwargs):
+        return await self._client.request(
+            method, self._with_prefix(url), *args, **kwargs
+        )
+
+    def __getattr__(self, name: str):
+        return getattr(self._client, name)
 
 
 @pytest.fixture
@@ -28,13 +64,19 @@ async def mock_db(worker_schema):
         pool_size=5,
     )
 
-    async with mock_db.engine.begin() as conn:
-        await conn.execute(text(f'DROP SCHEMA IF EXISTS "{worker_schema}" CASCADE'))
-        await conn.execute(text(f'CREATE SCHEMA "{worker_schema}"'))
-        await conn.execute(
-            text(f'SET search_path TO "{worker_schema}", public, pg_catalog')
-        )
-        await conn.run_sync(SQLBase.metadata.create_all)
+    try:
+        async with mock_db.engine.begin() as conn:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{worker_schema}" CASCADE'))
+            await conn.execute(text(f'CREATE SCHEMA "{worker_schema}"'))
+            await conn.execute(
+                text(f'SET search_path TO "{worker_schema}", public, pg_catalog')
+            )
+            await conn.run_sync(SQLBase.metadata.create_all)
+    except Exception as exc:
+        await mock_db.disconnect()
+        if _is_db_connect_error(exc):
+            pytest.skip(f"Test database unavailable: {exc}")
+        raise
 
     app.dependency_overrides[get_db] = lambda: mock_db
 
@@ -51,11 +93,32 @@ async def mock_db(worker_schema):
         await mock_db.disconnect()
 
 
+def _is_db_connect_error(exc: Exception) -> bool:
+    if isinstance(exc, (PermissionError, OSError)):
+        return True
+    if isinstance(exc, OperationalError):
+        message = str(exc).lower()
+        return any(
+            needle in message
+            for needle in (
+                "connect",
+                "connection refused",
+                "could not connect",
+                "permission",
+                "timeout",
+            )
+        )
+    orig = getattr(exc, "orig", None)
+    if isinstance(orig, (PermissionError, OSError)):
+        return True
+    return False
+
+
 @pytest_asyncio.fixture
 async def client(mock_db):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+        yield ApiClient(ac)
 
 
 @pytest_asyncio.fixture
@@ -67,6 +130,31 @@ async def auth_headers(mock_db):
             hashed_password="hashed",
             is_active=True,
             is_admin=False,
+        )
+
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+        payload = JWTBasePayload(
+            user_id=str(user.id),
+            email=user.email,
+            is_admin=user.is_admin,
+        )
+
+        token = TokenService.create_access_token(payload)
+        return {"Authorization": f"bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def admin_headers(mock_db):
+    async with mock_db.sessionmaker() as session:
+        user = User(
+            username="adminuser",
+            email="admin@example.com",
+            hashed_password="hashed",
+            is_active=True,
+            is_admin=True,
         )
 
         session.add(user)

@@ -6,6 +6,8 @@ from pydantic import EmailStr, Field
 from app.apis.homeuser.models import UserType
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
+## TODO add created_at and updated_at to HomeRead and GetHomeWithMembersResponse
+
 
 class HomeBase(BaseApiSchema):
     name: str = Field(..., min_length=2, max_length=100)
