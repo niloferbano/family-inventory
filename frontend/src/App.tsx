@@ -6,6 +6,17 @@ import { getToken, clearToken } from "./api/auth";
 import NotificationBell from "./components/NotificationBell";
 import NotificationSubscriptions from "./components/NotificationSubscriptions";
 
+const navActionStyle: React.CSSProperties = {
+  textDecoration: "none",
+  padding: "6px 12px",
+  borderRadius: 6,
+  border: "1px solid #e0e0e0",
+  background: "#fff",
+  color: "#1c1b1f",
+  fontSize: 14,
+  lineHeight: "20px",
+};
+
 export default function App() {
   const navigate = useNavigate();
   const [authed, setAuthed] = useState<boolean>(() => Boolean(getToken()));
@@ -36,12 +47,17 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {authed && <NotificationBell />}
           {authed && (
-            <Link to="/subscriptions" style={{ textDecoration: "none" }}>
+            <Link to="/subscriptions" style={navActionStyle}>
               Subscriptions
             </Link>
           )}
+          {authed && (
+            <button type="button" onClick={onLogout} style={navActionStyle}>
+              Logout
+            </button>
+          )}
           {!authed && (
-            <Link to="/login" style={{ textDecoration: "none" }}>
+            <Link to="/login" style={navActionStyle}>
               Log in
             </Link>
           )}

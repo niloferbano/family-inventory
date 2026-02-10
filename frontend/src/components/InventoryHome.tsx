@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { clearToken } from "../api/auth";
-import { listHomes, HomeSummary } from "../api/homes";
+import { addHomeMember, createHome, HomeSummary, listHomes, UserType } from "../api/homes";
 import {
   InventoryCategory,
   InventoryItem,
@@ -22,6 +22,11 @@ const CATEGORY_OPTIONS: Array<{ value: InventoryCategory; label: string }> = [
   { value: "other", label: "Other" },
 ];
 
+const MEMBER_ROLE_OPTIONS: Array<{ value: UserType; label: string }> = [
+  { value: "residence", label: "Resident" },
+  { value: "guest", label: "Guest" },
+];
+
 export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   const [homes, setHomes] = useState<HomeSummary[]>([]);
   const [homeId, setHomeId] = useState("");
@@ -41,6 +46,20 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   });
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [newHomeName, setNewHomeName] = useState("");
+  const [creatingHome, setCreatingHome] = useState(false);
+  const [homeFormError, setHomeFormError] = useState<string | null>(null);
+  const [homeFormSuccess, setHomeFormSuccess] = useState<string | null>(null);
+  const [showCreateHomeForm, setShowCreateHomeForm] = useState(false);
+  const [showAddMemberForm, setShowAddMemberForm] = useState(false);
+  const [memberForm, setMemberForm] = useState({
+    homeId: "",
+    email: "",
+    role: "residence" as UserType,
+  });
+  const [addingMember, setAddingMember] = useState(false);
+  const [memberFormError, setMemberFormError] = useState<string | null>(null);
+  const [memberFormSuccess, setMemberFormSuccess] = useState<string | null>(null);
 
   const handleLogout = useCallback(() => {
     clearToken();
@@ -97,6 +116,12 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
       loadItems(homeId);
     }
   }, [homeId, loadItems]);
+
+  useEffect(() => {
+    if (homeId && !memberForm.homeId) {
+      setMemberForm((prev) => ({ ...prev, homeId }));
+    }
+  }, [homeId, memberForm.homeId]);
 
   const selectedHome = useMemo(
     () => homes.find((home) => home.home_id === homeId),
@@ -180,6 +205,72 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  const submitNewHome = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setHomeFormError(null);
+    setHomeFormSuccess(null);
+    const trimmedName = newHomeName.trim();
+    if (!trimmedName) {
+      setHomeFormError("Home name is required.");
+      return;
+    }
+    setCreatingHome(true);
+    try {
+      const created = await createHome({ name: trimmedName });
+      setNewHomeName("");
+      setHomeFormSuccess(`Created home "${created.name}".`);
+      setHomeId(created.id);
+      await loadHomes();
+      setShowCreateHomeForm(false);
+    } catch (err) {
+      if (isUnauthorized(err)) {
+        handleLogout();
+        return;
+      }
+      setHomeFormError((err as Error)?.message ?? "Failed to create home.");
+    } finally {
+      setCreatingHome(false);
+    }
+  };
+
+  const submitAddMember = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setMemberFormError(null);
+    setMemberFormSuccess(null);
+    if (!memberForm.homeId) {
+      setMemberFormError("Select a home to add a member.");
+      return;
+    }
+    const email = memberForm.email.trim();
+    if (!email) {
+      setMemberFormError("Member email is required.");
+      return;
+    }
+    setAddingMember(true);
+    try {
+      const added = await addHomeMember(memberForm.homeId, {
+        userEmail: email,
+        userType: memberForm.role,
+      });
+      setMemberForm((prev) => ({
+        ...prev,
+        email: "",
+        role: "residence",
+      }));
+      setMemberFormSuccess(`Added ${added.username} to ${added.home_name}.`);
+      await loadHomes();
+      setShowAddMemberForm(false);
+    } catch (err) {
+      if (isUnauthorized(err)) {
+        handleLogout();
+        return;
+      }
+      setMemberFormError((err as Error)?.message ?? "Failed to add member.");
+    } finally {
+      setAddingMember(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 960, margin: "1rem auto", padding: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
@@ -189,16 +280,26 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
             {selectedHome ? `Home: ${selectedHome.name}` : "Select a home to view inventory."}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" onClick={() => setShowAddForm((prev) => !prev)}>
-            {showAddForm ? "Close" : "Add New Item"}
-          </button>
-          <button type="button" onClick={handleLogout}>Logout</button>
-        </div>
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <h4 style={{ margin: 0 }}>Your Homes</h4>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <h4 style={{ margin: 0 }}>Your Homes</h4>
+          <button
+            type="button"
+            onClick={() => {
+              if (showCreateHomeForm) {
+                setShowCreateHomeForm(false);
+                return;
+              }
+              setHomeFormError(null);
+              setHomeFormSuccess(null);
+              setShowCreateHomeForm(true);
+            }}
+          >
+            {showCreateHomeForm ? "Close Create Home" : "Create Home"}
+          </button>
+        </div>
         {loadingHomes ? (
           <div style={{ marginTop: 8 }}>Loading homes...</div>
         ) : homes.length === 0 ? (
@@ -233,6 +334,142 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
         )}
       </div>
 
+      <div style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <h4 style={{ marginBottom: 8 }}>Manage Homes</h4>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (showAddMemberForm) {
+                  setShowAddMemberForm(false);
+                  return;
+                }
+                setMemberFormError(null);
+                setMemberFormSuccess(null);
+                setShowAddMemberForm(true);
+              }}
+            >
+              {showAddMemberForm ? "Close Add Member" : "Add Member"}
+            </button>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 16,
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          }}
+        >
+          {showCreateHomeForm && (
+            <form
+              onSubmit={submitNewHome}
+              style={{
+                border: "1px solid #eee",
+                borderRadius: 12,
+                padding: 12,
+                background: "#fafafa",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>Create a home</div>
+              <label style={{ display: "grid", gap: 4 }}>
+                Home name
+                <input
+                  value={newHomeName}
+                  onChange={(e) => setNewHomeName(e.target.value)}
+                  placeholder="e.g., Main House"
+                />
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="submit" disabled={creatingHome}>
+                  {creatingHome ? "Creating..." : "Create Home"}
+                </button>
+                <button type="button" onClick={() => setShowCreateHomeForm(false)} disabled={creatingHome}>
+                  Cancel
+                </button>
+              </div>
+              {homeFormSuccess && <div style={{ color: "green" }}>{homeFormSuccess}</div>}
+              {homeFormError && <div style={{ color: "crimson" }}>{homeFormError}</div>}
+            </form>
+          )}
+
+          {showAddMemberForm && (
+            <form
+              onSubmit={submitAddMember}
+              style={{
+                border: "1px solid #eee",
+                borderRadius: 12,
+                padding: 12,
+                background: "#fafafa",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>Add a member</div>
+              <label style={{ display: "grid", gap: 4 }}>
+                Home
+                <select
+                  value={memberForm.homeId}
+                  onChange={(e) =>
+                    setMemberForm((prev) => ({ ...prev, homeId: e.target.value }))
+                  }
+                  disabled={loadingHomes || homes.length === 0}
+                >
+                  <option value="">Select</option>
+                  {homes.map((home) => (
+                    <option key={home.home_id} value={home.home_id}>
+                      {home.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: 4 }}>
+                Member email
+                <input
+                  type="email"
+                  value={memberForm.email}
+                  onChange={(e) => setMemberForm((prev) => ({ ...prev, email: e.target.value }))}
+                  placeholder="member@example.com"
+                />
+              </label>
+              <label style={{ display: "grid", gap: 4 }}>
+                Role
+                <select
+                  value={memberForm.role}
+                  onChange={(e) =>
+                    setMemberForm((prev) => ({
+                      ...prev,
+                      role: e.target.value as UserType,
+                    }))
+                  }
+                >
+                  {MEMBER_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="submit" disabled={addingMember || !memberForm.homeId}>
+                  {addingMember ? "Adding..." : "Add Member"}
+                </button>
+                <button type="button" onClick={() => setShowAddMemberForm(false)} disabled={addingMember}>
+                  Cancel
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                Members must already have an account.
+              </div>
+              {memberFormSuccess && <div style={{ color: "green" }}>{memberFormSuccess}</div>}
+              {memberFormError && <div style={{ color: "crimson" }}>{memberFormError}</div>}
+            </form>
+          )}
+        </div>
+      </div>
+
       <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <label>
           Home
@@ -252,6 +489,9 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
         </label>
         <button type="button" onClick={() => homeId && loadItems(homeId)} disabled={!homeId || loadingItems}>
           Refresh
+        </button>
+        <button type="button" onClick={() => setShowAddForm((prev) => !prev)} disabled={!homeId}>
+          {showAddForm ? "Close" : "Add New Item"}
         </button>
       </div>
 
