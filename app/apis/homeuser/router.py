@@ -41,3 +41,18 @@ async def change_user_role(
     async with db.begin() as session:
         service = HomeUserService(session, current_user)
         return await service.change_user_role(home_id, user_id, payload.role)
+
+
+@router.delete(
+    "/{home_id}/users/{user_id}",
+    summary="Remove a user from a home",
+)
+async def remove_user_from_home(
+    home_id: HomeId,
+    user_id: int,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    async with db.begin() as session:
+        service = HomeUserService(session, current_user)
+        return await service.remove_user_from_home(home_id, user_id)
