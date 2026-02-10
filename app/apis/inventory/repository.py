@@ -10,7 +10,7 @@ from app.apis.inventory.exceptions import InventoryItemNameConflict
 from app.apis.inventory.models import InventoryExpiryAlert, InventoryItem
 from app.apis.inventory.schema import ExpiryFilter, InventoryFilters
 from app.apis.inventory.types import InventoryAlertType
-from app.core.database.base import HomeId, InventoryExpiryAlertId
+from app.core.database.base import HomeId, InventoryExpiryAlertId, InventoryId
 from app.core.database.pagination import Page
 
 
@@ -23,6 +23,27 @@ class InventoryRepository:
         await self.session.flush()
         await self.session.refresh(item)
         return item
+
+    async def get_by_id(self, item_id: InventoryId) -> InventoryItem | None:
+        return await self.session.get(InventoryItem, item_id)
+
+    async def name_exists(
+        self,
+        *,
+        home_id: HomeId,
+        name: str,
+        exclude_id: InventoryId | None = None,
+    ) -> bool:
+        stmt = sa.select(InventoryItem.id).where(
+            InventoryItem.home_id == home_id,
+            InventoryItem.name == name,
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(InventoryItem.id != exclude_id)
+        return (await self.session.scalar(stmt)) is not None
+
+    async def delete(self, item: InventoryItem) -> None:
+        await self.session.delete(item)
 
     async def add_items(
         self, home_id: HomeId, items: list[InventoryItem]

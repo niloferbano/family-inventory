@@ -10,14 +10,16 @@ from app.apis.homes.exceptions import HomeNotFound
 from app.apis.homes.repository import HomeRepository
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.inventory.exceptions import (InventoryAccessDenied,
-                                           InventoryItemNameConflict)
+                                           InventoryItemNameConflict,
+                                           InventoryItemNotFound)
 from app.apis.inventory.models import InventoryItem
 from app.apis.inventory.repository import InventoryRepository
 from app.apis.inventory.schema import (InventoryCreateRequest,
                                        InventoryCreateResponse,
                                        InventoryFilters, InventoryGetResponse,
+                                       InventoryUpdateRequest,
                                        PaginatedInventoryItemResponse)
-from app.core.database.base import HomeId
+from app.core.database.base import HomeId, InventoryId
 from app.core.database.pagination import Page, update_pagination
 
 logger = logging.getLogger(__name__)
@@ -114,3 +116,56 @@ class InventoryService:
             previous=prev_url,
             results=[InventoryGetResponse.model_validate(item) for item in rows],
         )
+
+    async def update_item(
+        self,
+        *,
+        home_id: HomeId,
+        item_id: InventoryId,
+        payload: InventoryUpdateRequest,
+    ) -> InventoryItem:
+        item = await self.inventory_repo.get_by_id(item_id)
+        if not item or item.home_id != home_id:
+            raise InventoryItemNotFound(item_id=str(item_id))
+
+        is_owner = await self.home_user_repo.user_is_owner(
+            self.current_user.id, home_id
+        )
+        if not (self.current_user.is_admin or is_owner):
+            raise InventoryAccessDenied(home_id=str(home_id))
+
+        updates = payload.model_dump(exclude_unset=True)
+        if not updates:
+            return item
+
+        if "name" in updates and updates["name"] != item.name:
+            if await self.inventory_repo.name_exists(
+                home_id=home_id,
+                name=updates["name"],
+                exclude_id=item_id,
+            ):
+                raise InventoryItemNameConflict([updates["name"]])
+
+        for field, value in updates.items():
+            setattr(item, field, value)
+
+        await self.session.flush()
+        return item
+
+    async def delete_item(
+        self,
+        *,
+        home_id: HomeId,
+        item_id: InventoryId,
+    ) -> None:
+        item = await self.inventory_repo.get_by_id(item_id)
+        if not item or item.home_id != home_id:
+            raise InventoryItemNotFound(item_id=str(item_id))
+
+        is_owner = await self.home_user_repo.user_is_owner(
+            self.current_user.id, home_id
+        )
+        if not (self.current_user.is_admin or is_owner):
+            raise InventoryAccessDenied(home_id=str(home_id))
+
+        await self.inventory_repo.delete(item)

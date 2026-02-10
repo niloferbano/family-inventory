@@ -6,12 +6,15 @@ import signal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.apis.notifications.brokers import RabbitMQBroker
 from app.apis.notifications.worker.consumer import (NotificationWorker,
                                                     WorkerConfig)
 from app.apis.notifications.worker.sweeper import run_sweeper_loop
 from app.core.configs.config import settings
 from app.core.database.session import get_db
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 async def main() -> None:
@@ -52,35 +55,71 @@ async def main() -> None:
             loop.add_signal_handler(sig, _request_shutdown)
 
     async def _run_worker() -> None:
-        # Run until we are asked to shut down.
-        worker_task = asyncio.create_task(worker.run_forever())
-        try:
-            await shutdown.wait()
-        finally:
-            worker_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await worker_task
+        await worker.run_forever()
 
     async def _run_sweeper() -> None:
-        sweeper_task = asyncio.create_task(
-            run_sweeper_loop(
+        broker = RabbitMQBroker(
+            amqp_url=settings.RABBITMQ_URL,
+            exchange_name=settings.NOTIFICATION_EXCHANGE,
+        )
+        try:
+            connect = getattr(broker, "connect", None)
+            if callable(connect):
+                res = connect()
+                if asyncio.iscoroutine(res):
+                    await res
+            await run_sweeper_loop(
                 sessionmaker=sessionmaker,
                 senders=worker.senders,
                 worker_id=worker.worker_id,
+                broker=broker,
             )
-        )
-        try:
-            await shutdown.wait()
         finally:
-            sweeper_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await sweeper_task
+            # If the broker exposes an async close(), clean it up.
+            close = getattr(broker, "close", None)
+            if callable(close):
+                res = close()
+                if asyncio.iscoroutine(res):
+                    await res
+
+    worker_task: asyncio.Task | None = None
+    sweeper_task: asyncio.Task | None = None
+
+    def _task_done_callback(task: asyncio.Task) -> None:
+        # If any background task crashes, trigger shutdown.
+        with contextlib.suppress(asyncio.CancelledError):
+            exc = task.exception()
+            if exc is not None:
+                logger.exception("Background task crashed: %s", exc)
+                shutdown.set()
 
     try:
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(_run_worker())
-            tg.create_task(_run_sweeper())
+        worker_task = asyncio.create_task(_run_worker(), name="notification-worker")
+        sweeper_task = asyncio.create_task(_run_sweeper(), name="notification-sweeper")
+
+        worker_task.add_done_callback(_task_done_callback)
+        sweeper_task.add_done_callback(_task_done_callback)
+
+        # Block until we receive SIGINT/SIGTERM or a task crashes.
+        await shutdown.wait()
+
     finally:
+        # 1) Stop consuming so no new DB work starts
+        with contextlib.suppress(Exception):
+            await worker.stop_consuming()
+
+        # 2) Give in-flight message handlers a chance to finish
+        with contextlib.suppress(Exception):
+            await worker.drain(timeout=10.0)
+
+        # 3) Now cancel background loops (safe: they’re not starting new work)
+        for t in (worker_task, sweeper_task):
+            if t:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
+
+        # 4) Close broker, then DB
         await worker.close()
         await db.disconnect()
 

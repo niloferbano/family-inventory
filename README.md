@@ -71,6 +71,23 @@ WebSocket / Redis → UI
 
 ---
 
+inventory job → outbox row → (dispatcher) publish to RabbitMQ → notification worker consumes → ingest creates delivery rows → sender writes in_app_notifications
+
+
+InventoryExpiryJob
+  └─ writes NotificationOutbox (transactional)
+  └─ best-effort publish
+
+Outbox Sweeper
+  └─ UPDATE ... RETURNING (claim)
+  └─ publish
+  └─ mark SENT / FAILED
+
+Notification Worker
+  └─ consumes broker events
+  └─ creates NotificationDelivery rows
+  └─ InAppSender writes inbox
+
 ## 🧠 Key Design Decisions
 
 ### Event-Driven + Outbox Pattern
