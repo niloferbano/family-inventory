@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
+import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -109,6 +110,13 @@ class InAppSender:
             topic = "unknown"
         topic = str(topic)
 
+        if not event_id_raw:
+            raise ValueError(
+                "Missing event id in headers (expected x-event-id or event_id)"
+            )
+        if not home_id_raw:
+            raise ValueError("Missing home_id in headers (expected home_id)")
+
         event_id = NotificationEventId(str(event_id_raw))
         home_id = HomeId(str(home_id_raw))
 
@@ -126,22 +134,38 @@ class InAppSender:
         if hasattr(InAppNotification, "data"):
             row["data"] = h
 
+        stored_id: str | None = None
+        stored_row: InAppNotification | None = None
+
         async with session_scope(self.sessionmaker) as session:
             async with session.begin():
                 stmt = (
                     pg_insert(InAppNotification)
                     .values(row)
-                    .on_conflict_do_nothing(
-                        constraint="uq_notification_inbox_event_user"
-                    )
-                    .returning(InAppNotification)
+                    .on_conflict_do_nothing(constraint="uq_inbox_user_event")
+                    .returning(InAppNotification.id)
                 )
                 res = await session.execute(stmt)
-                stored = res.scalar_one_or_none()
+                inserted_id = res.scalar_one_or_none()
 
-        if stored is not None and self.realtime is not None:
+                # If we hit ON CONFLICT DO NOTHING, Postgres returns 0 rows.
+                # Fetch the existing row id so callers can still proceed.
+                if inserted_id is None:
+                    inserted_id = await session.scalar(
+                        sa.select(InAppNotification.id).where(
+                            InAppNotification.event_id == event_id,
+                            InAppNotification.user_id == user_id,
+                        )
+                    )
+
+                if inserted_id is not None:
+                    stored_id = str(inserted_id)
+                    stored_row = await session.get(InAppNotification, inserted_id)
+
+        # Real-time publish requires the full row (not just the id)
+        if stored_row is not None and self.realtime is not None:
             try:
-                await self.realtime.publish_in_app_from_row(row=stored)
+                await self.realtime.publish_in_app_from_row(row=stored_row)
             except Exception:
                 logger.exception(
                     "[NOTIFY][IN-APP] realtime publish failed user_id=%s event_id=%s",
@@ -150,9 +174,10 @@ class InAppSender:
                 )
 
         logger.info(
-            "[NOTIFY][IN-APP] stored inbox row user_id=%s event_id=%s topic=%s",
+            "[NOTIFY][IN-APP] inbox row user_id=%s event_id=%s topic=%s stored_id=%s",
             user_id,
             event_id,
             topic,
+            stored_id,
         )
         return "stored"

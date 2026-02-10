@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
-from app.core.database.base import SQLBase, TimeStampMixin
+from app.core.database.base import NotificationEventId, SQLBase, TimeStampMixin
 
 # Reuse enum types across models so SQLAlchemy doesn't create multiple objects
 # with the same Postgres enum name.
@@ -83,7 +83,7 @@ class NotificationDelivery(SQLBase, TimeStampMixin):
     )
 
     # FK to NotificationEvent.id
-    event_id: Mapped[uuid.UUID] = mapped_column(
+    event_id: Mapped[NotificationEventId] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("notification_events.id", ondelete="CASCADE"),
         nullable=False,
@@ -118,6 +118,15 @@ class NotificationDelivery(SQLBase, TimeStampMixin):
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Per-delivery context used by channel senders (e.g. home_id/topic for in-app).
+    # This avoids forcing `NotificationEvent` to be home-scoped.
+    context: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=sa.text("'{}'::jsonb"),
+    )
 
     event: Mapped["NotificationEvent"] = relationship(
         "NotificationEvent",
@@ -193,27 +202,48 @@ class NotificationOutbox(SQLBase, TimeStampMixin):
     __tablename__ = "notification_outbox"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid4, nullable=False
     )
 
-    event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), unique=True, nullable=False
+    # One outbox row per logical event (idempotency key)
+    event_id: Mapped[NotificationEventId] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
     )
 
     topic: Mapped[str] = mapped_column(String(200), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    headers: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="PENDING"
-    )  # PENDING|SENT|FAILED
-    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    next_retry_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+    headers: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=sa.text("'{}'::jsonb"),
     )
 
-    __table_args__ = (Index("ix_outbox_status_next_retry", "status", "next_retry_at"),)
+    # PENDING|SENT|FAILED
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="PENDING",
+        server_default=sa.text("'PENDING'"),
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=sa.text("0"),
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        # Stable constraint name so ON CONFLICT can reference it.
+        UniqueConstraint("event_id", name="uq_notification_outbox_event_id"),
+        Index("ix_outbox_status_next_retry", "status", "next_retry_at"),
+    )
 
 
 class NotificationSubscription(SQLBase, TimeStampMixin):

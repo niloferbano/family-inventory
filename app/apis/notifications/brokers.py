@@ -191,10 +191,10 @@ class RabbitMQBroker(EventBroker):
             event_id = str(v) if v else None
         except Exception:
             event_id = None
+        key = getattr(event, "key", None)
+        message_id = event_id or (str(key) if key else None)
 
-        message_id = event_id or (str(event.key) if event.key else None)
-
-        correlation_id = str(event.key) if event.key else None
+        correlation_id = str(key) if key else None
 
         headers = dict(event.headers or {})
         if event.key:

@@ -5,8 +5,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.apis.notifications.types import NotificationChannel
-from app.core.database.base import HomeId, UserId
+from app.apis.notifications.types import (NotificationChannel,
+                                          NotificationSource)
+from app.core.database.base import HomeId, NotificationEventId, UserId
 from app.schemas_base.base import BaseApiSchema
 
 
@@ -17,9 +18,9 @@ class NotificationRecipient(BaseModel):
 
 class NotificationRequest(BaseModel):
     # If caller doesn't provide, we generate in service.
-    event_id: UUID | None = None
+    event_id: NotificationEventId | None = None
 
-    source: str = Field(
+    source: NotificationSource = Field(
         ..., description="Service emitting this notification (e.g. inventory)"
     )
     event_type: str = Field(
@@ -40,7 +41,7 @@ class NotificationDeliveryResult(BaseApiSchema):
 
 
 class NotificationResponse(BaseApiSchema):
-    event_id: UUID
+    event_id: NotificationEventId
     accepted: bool
     deliveries: list[NotificationDeliveryResult]
     created_at: datetime
@@ -76,8 +77,8 @@ class SubscriptionOut(BaseApiSchema):
 class InAppNotificationOut(BaseApiSchema):
 
     id: UUID
-    event_id: UUID
-    home_id: UUID
+    event_id: NotificationEventId
+    home_id: HomeId
     subject: str | None
     message: str
     read_at: datetime | None

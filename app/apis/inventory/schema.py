@@ -18,6 +18,15 @@ class InventoryCreateRequest(BaseModel):
     notes: str | None = None
 
 
+class InventoryUpdateRequest(BaseModel):
+    name: str | None = None
+    category: InventoryCategory | None = None
+    quantity: int | None = None
+    unit: str | None = None
+    expiry_date: date | None = None
+    notes: str | None = None
+
+
 class InventoryCreateResponse(BaseApiSchema):
     id: UUID
     name: str

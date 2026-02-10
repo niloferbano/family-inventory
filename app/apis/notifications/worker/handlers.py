@@ -19,6 +19,7 @@ from app.apis.notifications.services.realtime import \
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType)
 from app.apis.notifications.worker.channels import ChannelSender
+from app.core.database.base import NotificationEventId
 
 _realtime_service: NotificationRealtimeService | None = None
 
@@ -57,6 +58,7 @@ class ClaimedDelivery:
     attempt_count: int
     max_attempts: int
     status: DeliveryStatus
+    context: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -169,7 +171,7 @@ async def bulk_upsert_deliveries(
 async def claim_deliveries_to_send(
     session: AsyncSession,
     *,
-    event_id: UUID,
+    event_id: NotificationEventId,
     now: datetime,
     worker_id: str,
     claim_limit: int = 1000,
@@ -231,6 +233,52 @@ async def prepare_event_deliveries(
     event_id = _parse_event_id(payload, headers)
     now = _utcnow()
 
+    # Normalize headers first so downstream code (ingest + channel senders) sees a stable shape.
+    headers = dict(headers)
+
+    # Preserve original routing key on retry-return messages, otherwise use current topic.
+    orig_rk = (
+        headers.get("x-original-routing-key")
+        or headers.get("x-original-topic")
+        or topic
+    )
+    headers.setdefault("x-original-routing-key", orig_rk)
+    headers.setdefault("x-original-topic", orig_rk)
+
+    # Ensure commonly-used routing/topic keys exist.
+    headers.setdefault("topic", topic)
+    headers.setdefault("routing_key", topic)
+
+    # Ensure we always have event id / home id present in headers for in-app sender and auditing.
+    headers.setdefault("event_id", str(payload.get("event_id") or event_id))
+    if headers.get("x-event-id") is None:
+        # Keep x-event-id in sync when available.
+        headers["x-event-id"] = headers["event_id"]
+
+    home_id = (
+        payload.get("home_id") or headers.get("home_id") or headers.get("x-home-id")
+    )
+    if home_id is not None:
+        headers.setdefault("home_id", str(home_id))
+        headers.setdefault("x-home-id", str(home_id))
+
+    # Build a generic delivery context blob that can be persisted alongside NotificationDelivery.
+    # Keep it NotificationEvent-agnostic so non-inventory notifications can reuse it.
+    context: dict[str, Any] = {
+        "topic": topic,
+        "routing_key": topic,
+        "x_original_routing_key": headers.get("x-original-routing-key"),
+        "source": headers.get("source") or payload.get("source") or "unknown",
+        "event_id": headers.get("event_id"),
+        "home_id": headers.get("home_id"),
+        "message_id": headers.get("message_id"),
+        "correlation_id": headers.get("correlation_id"),
+    }
+
+    # Attach context so ingest can persist it (e.g., NotificationDelivery.context)
+    # and senders can use it at send-time.
+    headers.setdefault("context", context)
+
     # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
     ingest = NotificationIngestService(session=session)
     await ingest.handle_inventory_event(topic=topic, payload=payload, headers=headers)
@@ -257,6 +305,7 @@ async def prepare_event_deliveries(
             attempt_count=d.attempt_count,
             max_attempts=d.max_attempts,
             status=d.status,
+            context=getattr(d, "context", None),
         )
         for d in claimed_rows
     ]
@@ -308,11 +357,18 @@ async def send_claimed_deliveries(
 
         async with sem:
             try:
+                merged_headers = dict(base_headers)
+                # If the delivery row has persisted context (JSONB), merge it.
+                # This is how senders (e.g. InAppSender) can reliably see event_id/home_id/topic
+                # even when the worker message headers are sparse.
+                if d.context and isinstance(d.context, dict):
+                    merged_headers.update(d.context)
+
                 await sender.send(
                     recipient=d.recipient,
                     subject=subject,
                     message=message,
-                    headers=base_headers,
+                    headers=merged_headers,
                 )
                 return DeliverySendResult(
                     delivery_id=d.id,

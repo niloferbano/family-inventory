@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { clearToken } from "../api/auth";
 import { HomeSummary, listHomes } from "../api/homes";
 import {
@@ -17,6 +18,47 @@ const CHANNEL_OPTIONS: Array<{ value: NotificationChannel; label: string }> = [
   { value: "push", label: "Push" },
   { value: "log", label: "Log" },
 ];
+
+const INVENTORY_TOPIC_OPTIONS = [
+  {
+    key: "expiring_soon",
+    label: "Expiring soon",
+    topic: "inventory.item.expiring_soon",
+  },
+  {
+    key: "expired",
+    label: "Expired",
+    topic: "inventory.item.expired",
+  },
+] as const;
+
+type InventoryTopicKey = (typeof INVENTORY_TOPIC_OPTIONS)[number]["key"];
+
+const TOPIC_BY_KEY: Record<InventoryTopicKey, string> = {
+  expiring_soon: "inventory.item.expiring_soon",
+  expired: "inventory.item.expired",
+};
+
+const LABEL_BY_KEY: Record<InventoryTopicKey, string> = {
+  expiring_soon: "Expiring soon",
+  expired: "Expired",
+};
+
+const KEY_BY_TOPIC: Record<string, InventoryTopicKey> = {
+  [TOPIC_BY_KEY.expiring_soon]: "expiring_soon",
+  [TOPIC_BY_KEY.expired]: "expired",
+};
+
+const DEFAULT_TOPIC_KEY: InventoryTopicKey = "expiring_soon";
+
+const topicLabelFor = (topic: string) => {
+  const key = KEY_BY_TOPIC[topic];
+  return key ? LABEL_BY_KEY[key] : "Other notification";
+};
+
+const topicKeyFor = (topic: string): InventoryTopicKey | null => {
+  return KEY_BY_TOPIC[topic] ?? null;
+};
 
 const isUnauthorized = (err: unknown) => {
   const message = String(err ?? "");
@@ -37,7 +79,7 @@ export default function NotificationSubscriptions({
 
   const [form, setForm] = useState({
     homeId: "",
-    topic: "",
+    topicKey: DEFAULT_TOPIC_KEY,
     channel: "inapp" as NotificationChannel,
     enabled: true,
   });
@@ -47,10 +89,11 @@ export default function NotificationSubscriptions({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({
-    topic: "",
+    topicKey: DEFAULT_TOPIC_KEY,
     channel: "inapp" as NotificationChannel,
     enabled: true,
   });
+  const [editingUnsupported, setEditingUnsupported] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -121,21 +164,17 @@ export default function NotificationSubscriptions({
       setFormError("Select a home to subscribe to.");
       return;
     }
-    if (!form.topic.trim()) {
-      setFormError("Topic is required.");
-      return;
-    }
     setCreating(true);
     try {
       await createSubscription({
         homeId: form.homeId,
-        topic: form.topic.trim(),
+        topic: TOPIC_BY_KEY[form.topicKey],
         channel: form.channel,
         enabled: form.enabled,
       });
       setForm((prev) => ({
         ...prev,
-        topic: "",
+        topicKey: DEFAULT_TOPIC_KEY,
         channel: "inapp",
         enabled: true,
       }));
@@ -153,9 +192,11 @@ export default function NotificationSubscriptions({
   };
 
   const startEdit = (sub: NotificationSubscription) => {
+    const topicKey = topicKeyFor(sub.topic);
     setEditingId(sub.id);
+    setEditingUnsupported(topicKey === null);
     setEditValues({
-      topic: sub.topic,
+      topicKey: topicKey ?? DEFAULT_TOPIC_KEY,
       channel: sub.channel,
       enabled: sub.enabled,
     });
@@ -163,25 +204,27 @@ export default function NotificationSubscriptions({
 
   const cancelEdit = () => {
     setEditingId(null);
+    setEditingUnsupported(false);
   };
 
   const saveEdit = async () => {
     if (!editingId) {
       return;
     }
-    if (!editValues.topic.trim()) {
-      setError("Topic is required.");
+    if (editingUnsupported) {
+      setError("This subscription type can't be edited here. Delete and recreate it.");
       return;
     }
     setSavingId(editingId);
     setError(null);
     try {
       await updateSubscription(editingId, {
-        topic: editValues.topic.trim(),
+        topic: TOPIC_BY_KEY[editValues.topicKey],
         channel: editValues.channel,
         enabled: editValues.enabled,
       });
       setEditingId(null);
+      setEditingUnsupported(false);
       await loadSubscriptions(filterHomeId || undefined);
     } catch (err) {
       if (isUnauthorized(err)) {
@@ -195,7 +238,8 @@ export default function NotificationSubscriptions({
   };
 
   const removeSubscription = async (sub: NotificationSubscription) => {
-    if (!window.confirm(`Delete subscription for ${sub.topic}?`)) {
+    const label = topicLabelFor(sub.topic);
+    if (!window.confirm(`Delete subscription for ${label}?`)) {
       return;
     }
     setDeletingId(sub.id);
@@ -228,12 +272,17 @@ export default function NotificationSubscriptions({
         <div>
           <h3 style={{ margin: 0 }}>Notification Subscriptions</h3>
           <p style={{ margin: "4px 0 0", color: "#555" }}>
-            Manage which notification topics you receive per home.
+            Manage which inventory alerts you receive per home.
           </p>
         </div>
-        <button type="button" onClick={handleLogout}>
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Link to="/" style={{ textDecoration: "none" }}>
+            Home
+          </Link>
+          <button type="button" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
       </div>
 
       <div
@@ -264,13 +313,22 @@ export default function NotificationSubscriptions({
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
-            Topic
-            <input
-              value={form.topic}
-              onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
-              placeholder="inventory.item.*"
-              required
-            />
+            Alert type
+            <select
+              value={form.topicKey}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  topicKey: e.target.value as InventoryTopicKey,
+                }))
+              }
+            >
+              {INVENTORY_TOPIC_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -362,6 +420,8 @@ export default function NotificationSubscriptions({
             {subscriptions.map((sub) => {
               const isEditing = editingId === sub.id;
               const homeName = homesById.get(sub.home_id) ?? sub.home_id;
+              const topicLabel = topicLabelFor(sub.topic);
+              const isSupportedTopic = topicKeyFor(sub.topic) !== null;
               return (
                 <div
                   key={sub.id}
@@ -382,17 +442,19 @@ export default function NotificationSubscriptions({
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600 }}>{sub.topic}</div>
+                      <div style={{ fontWeight: 600 }}>{topicLabel}</div>
                       <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
                         Home: {homeName} · Channel: {sub.channel} ·{" "}
                         {sub.enabled ? "Enabled" : "Disabled"}
+                        {!isSupportedTopic && " · Unsupported type"}
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
                         onClick={() => startEdit(sub)}
-                        disabled={Boolean(editingId) && !isEditing}
+                        disabled={!isSupportedTopic || (Boolean(editingId) && !isEditing)}
+                        title={!isSupportedTopic ? "Unsupported notification type" : undefined}
                       >
                         Edit
                       </button>
@@ -409,13 +471,23 @@ export default function NotificationSubscriptions({
                   {isEditing && (
                     <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
                       <label style={{ display: "grid", gap: 6 }}>
-                        Topic
-                        <input
-                          value={editValues.topic}
+                        Alert type
+                        <select
+                          value={editValues.topicKey}
                           onChange={(e) =>
-                            setEditValues((prev) => ({ ...prev, topic: e.target.value }))
+                            setEditValues((prev) => ({
+                              ...prev,
+                              topicKey: e.target.value as InventoryTopicKey,
+                            }))
                           }
-                        />
+                          disabled={editingUnsupported}
+                        >
+                          {INVENTORY_TOPIC_OPTIONS.map((option) => (
+                            <option key={option.key} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                         <label style={{ display: "grid", gap: 6 }}>
@@ -450,8 +522,17 @@ export default function NotificationSubscriptions({
                           Enabled
                         </label>
                       </div>
+                      {editingUnsupported && (
+                        <div style={{ color: "#555" }}>
+                          This subscription uses a custom alert type. Delete and recreate it.
+                        </div>
+                      )}
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button type="button" onClick={saveEdit} disabled={savingId === sub.id}>
+                        <button
+                          type="button"
+                          onClick={saveEdit}
+                          disabled={savingId === sub.id || editingUnsupported}
+                        >
                           {savingId === sub.id ? "Saving..." : "Save"}
                         </button>
                         <button type="button" onClick={cancelEdit} disabled={savingId === sub.id}>

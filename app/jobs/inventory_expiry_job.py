@@ -1,11 +1,10 @@
 import asyncio
 import logging
 from datetime import date
+from uuid import UUID
 
-from sqlalchemy import UUID
-
-from app.apis.inventory.expiry_service import InventoryExpiryService
 from app.apis.inventory.repository import InventoryRepository
+from app.apis.inventory.services.expiry_service import InventoryExpiryService
 from app.apis.inventory.types import InventoryAlertType
 from app.apis.notifications.brokers import (EventBroker, LogBroker,
                                             RabbitMQBroker)
@@ -15,10 +14,14 @@ from app.core.database.session import get_db
 
 logger = logging.getLogger(__name__)
 
-MAX_BATCHES = 100
+# Only time out the broker publish (and any non-DB work inside publish_expiry_event).
+# IMPORTANT: do NOT wrap DB session checkout/transactions in a short timeout, or you can
+# cancel while acquiring a pooled connection (causing CancelledError + leaked connections).
+PUBLISH_TIMEOUT_S = 10.0  # per publish call (after DB session is acquired)
 
-PUBLISH_TIMEOUT_S = 5.0  # per publish call
-CONCURRENCY = 20  # semaphore limit
+# Keep this <= your SQLAlchemy pool_size (+ small overflow). Start low and tune up.
+CONCURRENCY = 5  # semaphore limit
+MAX_BATCHES = 100  # safety limit to prevent infinite loop if something goes wrong. With CONCURRENCY=5 and limit=100, this allows up to 50k alerts per run (but will stop sooner if we hit an empty batch).
 
 
 async def run_inventory_expiry_job(
@@ -67,23 +70,32 @@ async def run_inventory_expiry_job(
             published_count = 0
             batches_processed = 0
 
-            expiry_service = InventoryExpiryService(
-                session=None, broker=broker
-            )  # publish-only service, no DB session needed since we fetch rows in a separate txn
             sem = asyncio.Semaphore(CONCURRENCY)
 
             async def _publish_one(
                 alert, item
             ) -> tuple[InventoryExpiryAlertId, Exception | None]:
-                """
-                Returns (alert_id, None) on success, (alert_id, exc) on failure/timeout.
+                """Publish a single alert.
+
+                NOTE: We intentionally acquire the DB session/connection *outside* the timeout.
+                Timeouts should not cancel connection checkout or transactional cleanup.
                 """
                 async with sem:
                     try:
-                        async with asyncio.timeout(PUBLISH_TIMEOUT_S):
-                            await expiry_service.publish_expiry_event(
-                                item=item, alert_type=alert_type
+                        # Acquire DB session/connection first (no short timeout here).
+                        async with db.begin() as session:
+                            expiry_service = InventoryExpiryService(
+                                session=session,
+                                broker=broker,
                             )
+
+                            # Apply timeout only to the publish call itself.
+                            async with asyncio.timeout(PUBLISH_TIMEOUT_S):
+                                await expiry_service.publish_expiry_event(
+                                    item=item,
+                                    alert_type=alert_type,
+                                )
+
                         return alert.id, None
                     except Exception as exc:
                         return alert.id, exc

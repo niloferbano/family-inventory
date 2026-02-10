@@ -22,6 +22,15 @@ export interface InventoryItem {
   home_id: string;
 }
 
+export interface InventoryUpdateRequest {
+  name?: string;
+  category?: InventoryCategory;
+  quantity?: number;
+  unit?: string;
+  expiry_date?: string | null;
+  notes?: string | null;
+}
+
 export interface PaginatedInventoryResponse {
   count: number;
   total_pages: number;
@@ -63,4 +72,35 @@ export async function createInventoryItem(
     body: JSON.stringify([payload]),
   });
   return handleResponse<InventoryItem[]>(res);
+}
+
+export async function updateInventoryItem(
+  homeId: string,
+  itemId: string,
+  payload: InventoryUpdateRequest
+): Promise<InventoryItem> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/inventory/${homeId}/${itemId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<InventoryItem>(res);
+}
+
+export async function deleteInventoryItem(homeId: string, itemId: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/inventory/${homeId}/${itemId}`, {
+    method: "DELETE",
+    headers: {
+      ...(token ? { Authorization: `bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${text}`);
+  }
 }

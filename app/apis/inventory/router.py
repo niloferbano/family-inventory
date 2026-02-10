@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from app.apis.errors.errors import ErrorResponse
 from app.apis.inventory.schema import (ExpiryFilter, InventoryCreateRequest,
                                        InventoryCreateResponse,
-                                       InventoryFilters,
+                                       InventoryFilters, InventoryGetResponse,
+                                       InventoryUpdateRequest,
                                        PaginatedInventoryItemResponse)
-from app.apis.inventory.service import InventoryService
+from app.apis.inventory.services.service import InventoryService
 from app.apis.inventory.types import InventoryCategory
-from app.core.database.base import HomeId
+from app.core.database.base import HomeId, InventoryId
 from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
@@ -69,3 +70,34 @@ async def list_inventory_items(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User doesn't have access",
             )
+
+
+@router.patch("/{home_id}/{item_id}", response_model=InventoryGetResponse)
+async def update_inventory_item(
+    home_id: HomeId,
+    item_id: InventoryId,
+    payload: InventoryUpdateRequest,
+    db_manager=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    async with db_manager.begin() as session:
+        service = InventoryService(session, current_user)
+        item = await service.update_item(
+            home_id=home_id,
+            item_id=item_id,
+            payload=payload,
+        )
+        return InventoryGetResponse.model_validate(item)
+
+
+@router.delete("/{home_id}/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_inventory_item(
+    home_id: HomeId,
+    item_id: InventoryId,
+    db_manager=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    async with db_manager.begin() as session:
+        service = InventoryService(session, current_user)
+        await service.delete_item(home_id=home_id, item_id=item_id)
+        return

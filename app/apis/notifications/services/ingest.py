@@ -12,7 +12,8 @@ from app.apis.notifications.models import (NotificationDelivery,
 from app.apis.notifications.repository import \
     NotificationSubscriptionRepository
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
-                                          NotificationRecipientType)
+                                          NotificationRecipientType,
+                                          NotificationSource)
 from app.apis.users.repository import UserRepository
 from app.core.database.base import HomeId, NotificationEventId
 from app.core.logging import get_logger
@@ -36,7 +37,7 @@ class NotificationIngestService:
             "INGEST class=%s module=%s", type(self).__name__, type(self).__module__
         )
 
-        event_id = NotificationEventId(UUID(payload["event_id"]))
+        event_id = NotificationEventId(NotificationEventId(payload["event_id"]))
         home_id = HomeId(UUID(payload["home_id"]))
 
         subject = self._subject(topic, payload)
@@ -44,7 +45,7 @@ class NotificationIngestService:
 
         event = NotificationEvent(
             id=event_id,
-            source="inventory",
+            source=NotificationSource.INVENTORY,
             event_type=topic,
             subject=subject,
             message=message,

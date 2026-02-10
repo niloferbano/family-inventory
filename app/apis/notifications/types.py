@@ -10,6 +10,12 @@ class NotificationChannel(StrEnum):
     IN_APP = "in_app"
 
 
+class NotificationSource(StrEnum):
+    INVENTORY = "inventory"
+    UI = "ui"
+    SYSTEM = "system"
+
+
 class NotificationRecipientType(StrEnum):
     EMAIL = "email"
     PHONE = "phone"
@@ -33,7 +39,7 @@ class RecipientPayload(TypedDict):
 
 class NotificationMessage(TypedDict):
     event_id: str
-    source: str
+    source: NotificationSource
     event_type: str
     subject: str | None
     message: str
