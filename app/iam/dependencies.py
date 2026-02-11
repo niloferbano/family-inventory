@@ -8,7 +8,8 @@ from app.core.database.base import UserId
 from app.core.database.session import get_async_session
 from app.iam.token_service import TokenService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/users/login")
+# Use full API prefix so Swagger UI can resolve the token endpoint.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
 
 
 async def get_current_user(
