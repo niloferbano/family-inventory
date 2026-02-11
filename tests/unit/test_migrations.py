@@ -2,11 +2,11 @@ import uuid
 from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
+from alembic import command
+from alembic.config import Config
 from app.core.configs.config import settings
 
 

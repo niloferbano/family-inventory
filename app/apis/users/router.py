@@ -4,7 +4,7 @@ from app.apis.users.auth_service import AuthService
 from app.apis.users.exceptions import (InvalidCredentials, UserAlreadyExists,
                                        UserNameAlreadyExists)
 from app.apis.users.schema import (PaginatedUsersResponse,
-                                   UserActivationRequest, UserBase, UserLogin,
+                                   UserActivationRequest, UserBase,
                                    UserRegisterResponse)
 from app.apis.users.user_service import UserService
 from app.core.database.pagination import PaginationParams, get_pagination
@@ -64,11 +64,30 @@ async def activate_user(
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: UserLogin, db_manager=Depends(get_db)):
+async def login(request: Request, db_manager=Depends(get_db)):
     async with db_manager.begin() as session:
         service = AuthService(session=session)
         try:
-            return await service.login(payload.email, payload.password)
+            content_type = request.headers.get("content-type", "")
+            if (
+                "application/x-www-form-urlencoded" in content_type
+                or "multipart/form-data" in content_type
+            ):
+                form = await request.form()
+                email = form.get("username") or form.get("email")
+                password = form.get("password")
+            else:
+                data = await request.json()
+                email = data.get("email") or data.get("username")
+                password = data.get("password")
+
+            if not email or not password:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Missing email/username or password",
+                )
+
+            return await service.login(str(email), str(password))
         except InvalidCredentials:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid credentials"
