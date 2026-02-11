@@ -62,6 +62,13 @@ class HomeUserService:
         if not (self.current_user.is_admin or is_owner):
             raise HomePermissionDenied(home_id=home_id)
 
+        existing = await self.home_user_repo.get(
+            user_id=target_user.id,
+            home_id=home_id,
+        )
+        if existing:
+            raise AlreadyMemberException(home_id, target_user.id)
+
         home_user = HomeUser(
             user_id=target_user.id,
             home_id=home_id,
