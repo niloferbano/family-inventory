@@ -4,6 +4,7 @@ CLI = python -m family_cli.main
 APP_MODULE = app.main:app
 HOST = 0.0.0.0
 PORT = 8000
+FRONTEND_DIR = frontend
 
 .PHONY: \
 	run up down logs restart \
@@ -24,6 +25,9 @@ up:
 
 down:
 	docker compose down
+
+remove-all:
+	docker compose down -v --remove-orphans
 
 logs:
 	docker compose logs -f
@@ -105,3 +109,16 @@ help:
 	@echo "Available commands:"
 	@awk -F':' '/^[a-zA-Z0-9_-]+:/ {print "  - " $$1}' Makefile
 	@echo ""
+
+# ---------- Frontend ----------
+audit-frontend:
+	npm audit --prefix $(FRONTEND_DIR)
+
+up-frontend:
+	npm install --prefix $(FRONTEND_DIR)
+
+ci-up-frontend:
+	npm ci --prefix $(FRONTEND_DIR)
+
+run-frontend:
+	npm run dev --prefix $(FRONTEND_DIR)

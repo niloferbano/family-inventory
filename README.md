@@ -136,6 +136,8 @@ make up
 make db-upgrade
 make run
 make worker
+make up-frontend
+make run-frontend
 ```
 
 ---
@@ -186,3 +188,9 @@ make worker
 - add notification_templates table + admin endpoints + caching
 
 ---
+
+## Cleanup
+
+```bash
+make remove-all <-- ⚠️ This will remove all the containers, networks, volumes, and images.
+```
