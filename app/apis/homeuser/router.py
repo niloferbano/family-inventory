@@ -1,4 +1,5 @@
-# app/apis/homeuser/router.py
+import uuid
+
 from fastapi import APIRouter, Depends
 
 from app.apis.homeuser.schema import (ChangeHomeUserRoleRequest,
@@ -33,14 +34,14 @@ async def add_user_to_home(
 )
 async def change_user_role(
     home_id: HomeId,
-    user_id: int,
+    user_id: uuid.UUID,
     payload: ChangeHomeUserRoleRequest,
     current_user=Depends(get_current_user),
     db=Depends(get_db),
 ):
     async with db.begin() as session:
         service = HomeUserService(session, current_user)
-        return await service.change_user_role(home_id, user_id, payload.role)
+        return await service.change_user_role(home_id, user_id, payload.user_type)
 
 
 @router.delete(
@@ -49,7 +50,7 @@ async def change_user_role(
 )
 async def remove_user_from_home(
     home_id: HomeId,
-    user_id: int,
+    user_id: uuid.UUID,
     current_user=Depends(get_current_user),
     db=Depends(get_db),
 ):

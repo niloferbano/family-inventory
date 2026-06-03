@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError
@@ -35,7 +37,7 @@ async def get_current_user(
         raise InvalidCredentials()
 
     user_repo = UserRepository(session)
-    user = await user_repo.get_by_id(UserId(user_id))
+    user = await user_repo.get_by_id(UserId(UUID(str(user_id))))
 
     if not user:
         raise InvalidCredentials()

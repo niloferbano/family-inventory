@@ -12,7 +12,7 @@ class AlreadyMemberException(DomainConflictError):
             message="User is already a member of this home",
             details={
                 "home_id": str(home_id),
-                "user_id": user_id,
+                "user_id": str(user_id),
             },
         )
 

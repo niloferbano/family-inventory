@@ -47,10 +47,10 @@ class InventoryEventFactory:
         event_key = (
             f"inventory:{item.home_id}:{item.id}:{alert_type.value}:{today.isoformat()}"
         )
-        event_id = uuid5(self.namespace, event_key)
+        event_id = NotificationEventId(uuid5(self.namespace, event_key))
 
         if alert_type == InventoryAlertType.EXPIRING_SOON:
-            evt = InventoryItemExpiringSoon(
+            expiring_evt = InventoryItemExpiringSoon(
                 event_id=event_id,
                 home_id=item.home_id,
                 item_id=item.id,
@@ -61,7 +61,7 @@ class InventoryEventFactory:
             return EventEnvelope(
                 topic="inventory.item.expiring_soon",
                 key=str(item.id),
-                payload=evt.model_dump(mode="json"),
+                payload=expiring_evt.model_dump(mode="json"),
                 headers={
                     "source": "inventory",
                     "home_id": str(item.home_id),
@@ -70,7 +70,7 @@ class InventoryEventFactory:
             )
 
         if alert_type == InventoryAlertType.EXPIRED:
-            evt = InventoryItemExpired(
+            expired_evt = InventoryItemExpired(
                 event_id=event_id,
                 home_id=item.home_id,
                 item_id=item.id,
@@ -80,7 +80,7 @@ class InventoryEventFactory:
             return EventEnvelope(
                 topic="inventory.item.expired",
                 key=str(item.id),
-                payload=evt.model_dump(mode="json"),
+                payload=expired_evt.model_dump(mode="json"),
                 headers={
                     "source": "inventory",
                     "home_id": str(item.home_id),

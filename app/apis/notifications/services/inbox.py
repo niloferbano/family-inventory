@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.notifications.models import InAppNotification
 from app.apis.notifications.schema import InAppNotificationOut
+from app.core.database.base import HomeId, NotificationEventId
 
 
 class NotificationInboxService:
@@ -54,8 +55,8 @@ class NotificationInboxService:
         return [
             InAppNotificationOut(
                 id=r.id,
-                event_id=r.event_id,
-                home_id=r.home_id,
+                event_id=NotificationEventId(r.event_id),
+                home_id=HomeId(r.home_id),
                 subject=r.subject,
                 message=r.message,
                 read_at=r.read_at,

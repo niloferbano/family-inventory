@@ -1,14 +1,22 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.configs.cache_config import CacheConfiguration
+from app.core.configs.smtp_config import SMTPSettings
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
     DATABASE_URL: str = (
         "postgresql+asyncpg://family_user:family_pass@localhost:5432/family_inventory"
     )
 
     DEBUG: bool = True
+
+    SMTP: SMTPSettings = SMTPSettings()
 
     # JWT
     JWT_SECRET_KEY: str = "notset"

@@ -39,5 +39,5 @@ class GetHomeWithMembersResponse(BaseApiSchema):
     members: list[GetHomesResponse]
 
 
-class PaginatedAdminHomesResponse(PaginatedOutput[GetHomesResponse]):
+class PaginatedAdminHomesResponse(PaginatedOutput[GetHomeWithMembersResponse]):
     results: list[GetHomeWithMembersResponse]

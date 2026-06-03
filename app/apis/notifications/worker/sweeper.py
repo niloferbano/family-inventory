@@ -19,6 +19,7 @@ from app.apis.notifications.worker.handlers import (
     ClaimedDelivery, build_failure_results_for_claimed,
     claim_deliveries_to_send, finalize_delivery_results,
     send_claimed_deliveries)
+from app.core.database.base import NotificationEventId
 from app.core.database.session import session_scope
 
 logger = logging.getLogger(__name__)
@@ -254,7 +255,7 @@ async def sweep_once(
 
                 claimed = await claim_deliveries_to_send(
                     session,
-                    event_id=event_id,
+                    event_id=NotificationEventId(event_id),
                     now=_utcnow(),
                     worker_id=worker_id,
                     claim_limit=claim_limit,
@@ -301,7 +302,7 @@ async def sweep_once(
             if claimed_rows:
                 results = await send_claimed_deliveries(
                     claimed=claimed_rows,
-                    subject=subject,
+                    subject=subject or "",
                     message=message,
                     headers=base_headers,
                     senders=senders,

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,8 @@ from app.apis.homeuser.models import HomeUser, UserType
 from app.apis.users.models import User
 from app.core.database.base import HomeId, UserId
 from app.core.database.pagination import Page
+
+AdminHomeMemberRow = tuple[HomeId, str, datetime, datetime, UserId, str, str, UserType]
 
 
 class HomeRepository:
@@ -60,11 +64,11 @@ class HomeRepository:
         )
 
         result = await self.session.execute(stmt)
-        return result.all()
+        return [(home, user, role) for home, user, role in result.all()]
 
     async def get_all_homes_with_members(
         self, pagination: Page
-    ) -> list[tuple[Home, User, UserType]]:
+    ) -> tuple[list[AdminHomeMemberRow], int]:
         limit, offset = pagination.to_limit()
 
         base_query = (
@@ -92,7 +96,7 @@ class HomeRepository:
 
         rows = (await self.session.execute(paginated_query)).all()
 
-        return rows, total
+        return [tuple(row) for row in rows], int(total)
 
     async def delete(self, home: Home):
         await self.session.delete(home)

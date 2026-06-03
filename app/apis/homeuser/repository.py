@@ -39,7 +39,7 @@ class HomeUserRepository:
         stmt = sa.select(HomeUser.home_id).where(
             sa.and_(HomeUser.user_id == user_id, HomeUser.user_type == UserType.OWNER)
         )
-        return await self.session.scalars(stmt).all()
+        return (await self.session.scalars(stmt)).all()
 
     async def list_members_with_users(
         self, home_id: HomeId
@@ -65,7 +65,7 @@ class HomeUserRepository:
         result = await self.session.execute(query)
         return result.scalar_one_or_none() is not None
 
-    async def get_home_ids_for_owner(self, user_id: UserId) -> list[int]:
+    async def get_home_ids_for_owner(self, user_id: UserId) -> list[HomeId]:
         stmt = sa.select(HomeUser.home_id).where(
             HomeUser.user_id == user_id,
             HomeUser.user_type == UserType.OWNER,

@@ -168,10 +168,10 @@ class InventoryExpiryService:
             or headers.get("x-event-id")
         )
         if event_id_raw:
-            event_id = NotificationEventId(str(event_id_raw))
+            event_id = NotificationEventId(UUID(str(event_id_raw)))
         else:
             stable_key = f"expiry:{item.id}:{alert_type.value}:{today.isoformat()}"
-            event_id = NotificationEventId(str(uuid.uuid5(EVENT_NAMESPACE, stable_key)))
+            event_id = NotificationEventId(uuid.uuid5(EVENT_NAMESPACE, stable_key))
 
         payload, headers = self._apply_context(
             topic=str(topic),
@@ -201,7 +201,7 @@ class InventoryExpiryService:
         )
 
         insert_stmt = (
-            pg_insert(tbl)
+            pg_insert(NotificationOutbox)
             .values(outbox_row)
             .on_conflict_do_nothing(index_elements=[tbl.c.event_id])
             .returning(tbl.c.id, tbl.c.status, tbl.c.attempt_count)
