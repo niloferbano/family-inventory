@@ -5,6 +5,7 @@ import json
 import socket
 import uuid
 from dataclasses import dataclass
+from typing import Any, cast
 
 import aio_pika
 from aio_pika import IncomingMessage
@@ -14,8 +15,8 @@ from app.apis.notifications.exceptions import UnprocessableMessageError
 from app.apis.notifications.services.realtime import \
     NotificationRealtimeService
 from app.apis.notifications.types import NotificationChannel
-from app.apis.notifications.worker.channels import (ChannelSender, InAppSender,
-                                                    LogSender)
+from app.apis.notifications.worker.channels import (ChannelSender, EmailSender,
+                                                    InAppSender, LogSender)
 from app.apis.notifications.worker.handlers import (
     build_failure_results_for_claimed, finalize_delivery_results,
     prepare_event_deliveries, send_claimed_deliveries)
@@ -73,7 +74,7 @@ class WorkerConfig:
 def _get_retry_count(msg: IncomingMessage) -> int:
     v = (msg.headers or {}).get("x-retry-count", 0)
     try:
-        return int(v)
+        return int(cast(Any, v))
     except Exception:
         return 0
 
@@ -112,6 +113,7 @@ class NotificationWorker:
                 sessionmaker=sessionmaker,
                 realtime=realtime,
             ),
+            NotificationChannel.EMAIL: EmailSender(),
         }
 
     async def stop_consuming(self) -> None:
@@ -140,30 +142,44 @@ class NotificationWorker:
         await asyncio.wait_for(_wait_all_free(), timeout=timeout)
 
     async def connect(self) -> None:
-        self._connection = await aio_pika.connect_robust(self.cfg.amqp_url)
-        self._channel = await self._connection.channel()
+        self._connection = cast(
+            aio_pika.RobustConnection, await aio_pika.connect_robust(self.cfg.amqp_url)
+        )
+        self._channel = cast(aio_pika.RobustChannel, await self._connection.channel())
         await self._channel.set_qos(prefetch_count=self.cfg.prefetch)
 
-        self._exchange = await self._channel.declare_exchange(
-            self.cfg.exchange_name,
-            aio_pika.ExchangeType.TOPIC,
-            durable=True,
+        self._exchange = cast(
+            aio_pika.Exchange,
+            await self._channel.declare_exchange(
+                self.cfg.exchange_name,
+                aio_pika.ExchangeType.TOPIC,
+                durable=True,
+            ),
         )
 
-        self._dlx = await self._channel.declare_exchange(
-            self.cfg.dlx_name,
-            aio_pika.ExchangeType.DIRECT,
-            durable=True,
+        self._dlx = cast(
+            aio_pika.Exchange,
+            await self._channel.declare_exchange(
+                self.cfg.dlx_name,
+                aio_pika.ExchangeType.DIRECT,
+                durable=True,
+            ),
         )
 
-        self._retry_exchange = await self._channel.declare_exchange(
-            self.cfg.retry_exchange_name,
-            aio_pika.ExchangeType.DIRECT,
-            durable=True,
+        self._retry_exchange = cast(
+            aio_pika.Exchange,
+            await self._channel.declare_exchange(
+                self.cfg.retry_exchange_name,
+                aio_pika.ExchangeType.DIRECT,
+                durable=True,
+            ),
         )
 
         # main queue
-        q = await self._channel.declare_queue(self.cfg.queue_name, durable=True)
+        q = cast(
+            aio_pika.Queue,
+            await self._channel.declare_queue(self.cfg.queue_name, durable=True),
+        )
 
         for pattern in self.cfg.bindings or []:
             await q.bind(self._exchange, routing_key=pattern)
@@ -295,7 +311,7 @@ class NotificationWorker:
                 try:
                     results = await send_claimed_deliveries(
                         claimed=claimed,
-                        subject=subject,
+                        subject=subject or "",
                         message=message,
                         headers=headers,
                         senders=self.senders,
@@ -394,7 +410,7 @@ class NotificationWorker:
             raise RuntimeError(
                 "Worker is not connected. Call connect/connect_with_retry first."
             )
-        await self._queue.consume(self.on_message, no_ack=False)
+        await self._queue.consume(cast(Any, self.on_message), no_ack=False)
         logger.info("NotificationWorker consuming queue=%s", self.cfg.queue_name)
 
         # keep process alive

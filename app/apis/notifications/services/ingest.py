@@ -15,7 +15,7 @@ from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType,
                                           NotificationSource)
 from app.apis.users.repository import UserRepository
-from app.core.database.base import HomeId, NotificationEventId
+from app.core.database.base import HomeId, NotificationEventId, UserId
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -37,7 +37,7 @@ class NotificationIngestService:
             "INGEST class=%s module=%s", type(self).__name__, type(self).__module__
         )
 
-        event_id = NotificationEventId(NotificationEventId(payload["event_id"]))
+        event_id = NotificationEventId(UUID(payload["event_id"]))
         home_id = HomeId(UUID(payload["home_id"]))
 
         subject = self._subject(topic, payload)
@@ -75,14 +75,14 @@ class NotificationIngestService:
         if not subs:
             return
 
-        user_ids = list({s.user_id for s in subs})
+        user_ids = [UserId(user_id) for user_id in {s.user_id for s in subs}]
         users = await self.user_repo.get_users_by_ids(user_ids)
         user_by_id = {u.id: u for u in users}
 
         delivery_rows: list[dict] = []
 
         for s in subs:
-            user = user_by_id.get(s.user_id)
+            user = user_by_id.get(UserId(s.user_id))
             if not user:
                 continue
 

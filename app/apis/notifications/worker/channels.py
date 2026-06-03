@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import smtplib
+import ssl
 from dataclasses import dataclass
+from email.message import EmailMessage
 from typing import Any, Mapping, Protocol
+from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -11,6 +15,7 @@ from app.apis.notifications.models import InAppNotification
 from app.apis.notifications.services.realtime import \
     NotificationRealtimeService
 from app.apis.notifications.types import NotificationChannel
+from app.core.configs.config import settings
 from app.core.database.base import HomeId, NotificationEventId, UserId
 from app.core.database.session import session_scope
 from app.core.logging import get_logger
@@ -87,7 +92,7 @@ class InAppSender:
 
         # recipient is expected to be the user_id (UUID string)
         try:
-            user_id = UserId(str(recipient))
+            user_id = UserId(UUID(str(recipient)))
         except Exception as exc:
             raise TypeError(f"Invalid in-app recipient user_id: {recipient}") from exc
 
@@ -117,8 +122,8 @@ class InAppSender:
         if not home_id_raw:
             raise ValueError("Missing home_id in headers (expected home_id)")
 
-        event_id = NotificationEventId(str(event_id_raw))
-        home_id = HomeId(str(home_id_raw))
+        event_id = NotificationEventId(UUID(str(event_id_raw)))
+        home_id = HomeId(UUID(str(home_id_raw)))
 
         row: dict[str, Any] = {
             "user_id": user_id,
@@ -181,3 +186,43 @@ class InAppSender:
             stored_id,
         )
         return "stored"
+
+
+@dataclass
+class EmailSender:
+    channel: NotificationChannel = NotificationChannel.EMAIL
+
+    async def send(
+        self,
+        *,
+        recipient: str,
+        subject: str | None,
+        message: str | None,
+        headers: Mapping[str, Any] | None = None,
+    ) -> str:
+        msg = EmailMessage()
+        msg["Subject"] = subject or ""
+        msg["From"] = settings.SMTP.from_email
+        msg["To"] = recipient
+        msg.set_content(message or "")
+
+        context = ssl.create_default_context()
+        if settings.SMTP.use_ssl:
+            with smtplib.SMTP_SSL(
+                settings.SMTP.host,
+                settings.SMTP.port,
+                context=context,
+            ) as server:
+                if settings.SMTP.username and settings.SMTP.password:
+                    server.login(settings.SMTP.username, settings.SMTP.password)
+                server.send_message(msg)
+
+        else:
+            with smtplib.SMTP(settings.SMTP.host, settings.SMTP.port) as server:
+                if settings.SMTP.use_tls:
+                    server.starttls(context=context)
+                if settings.SMTP.username and settings.SMTP.password:
+                    server.login(settings.SMTP.username, settings.SMTP.password)
+                server.send_message(msg)
+
+        return "email_sent"

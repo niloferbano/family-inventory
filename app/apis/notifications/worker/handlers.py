@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -290,7 +290,7 @@ async def prepare_event_deliveries(
     # ✅ Step 2: claim deliveries from DB (NOT from payload.recipients)
     claimed_rows = await claim_deliveries_to_send(
         session,
-        event_id=event_id,
+        event_id=NotificationEventId(event_id),
         now=now,
         worker_id=worker_id,
         claim_limit=claim_limit,
@@ -346,12 +346,17 @@ async def send_claimed_deliveries(
     sem = asyncio.Semaphore(concurrency)
 
     async def _send_one(d: ClaimedDelivery) -> DeliverySendResult:
-        sender = senders.get(d.channel)
+        channel = (
+            d.channel
+            if isinstance(d.channel, NotificationChannel)
+            else NotificationChannel(d.channel)
+        )
+        sender = senders.get(channel)
         if not sender:
             return DeliverySendResult(
                 delivery_id=d.id,
                 status=DeliveryStatus.FAILED,
-                last_error=f"Unsupported channel: {d.channel.value}",
+                last_error=f"Unsupported channel: {channel.value}",
                 next_retry_at=None,
             )
 
@@ -437,7 +442,7 @@ async def finalize_delivery_results(
     )
 
     res = await session.execute(stmt)
-    return int(res.rowcount or 0)
+    return int(cast(Any, res).rowcount or 0)
 
 
 def build_failure_results_for_claimed(

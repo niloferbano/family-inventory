@@ -64,7 +64,7 @@ class UserService:
 
         query = self.user_repo.get_all_query()
 
-        return await apply_pagination(
+        return await apply_pagination(  # type: ignore[type-var]
             query=query,
             session=self.session,
             sort_by=UserModel.id,

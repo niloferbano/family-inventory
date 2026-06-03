@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import EmailStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +15,7 @@ from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.homeuser.schema import HomeUserAddResponse
 from app.apis.users.models import User
 from app.apis.users.repository import UserRepository
-from app.core.database.base import HomeId
+from app.core.database.base import HomeId, UserId
 
 
 class HomeUserService:
@@ -26,7 +28,7 @@ class HomeUserService:
         self.session = session
 
     async def create_owner_for_home(self, home_id: HomeId) -> HomeUser:
-        existing = await self.repo.get(self.current_user.id, home_id)
+        existing = await self.home_user_repo.get(self.current_user.id, home_id)
         if existing:
             return existing
 
@@ -35,7 +37,7 @@ class HomeUserService:
             home_id=home_id,
             user_type=UserType.OWNER,
         )
-        return await self.repo.add(home_user)
+        return await self.home_user_repo.add(home_user)
 
     async def add_user_to_home(
         self,
@@ -85,10 +87,12 @@ class HomeUserService:
             user_type=user_type,
         )
 
-    async def user_can_access(self, user_id: int, home_id: HomeId) -> bool:
+    async def user_can_access(self, user_id: UserId, home_id: HomeId) -> bool:
         return await self.home_user_repo.user_has_access(user_id, home_id)
 
-    async def change_user_role(self, home_id: HomeId, user_id: int, new_role: UserType):
+    async def change_user_role(
+        self, home_id: HomeId, user_id: UUID, new_role: UserType
+    ):
         if new_role == UserType.OWNER:
             raise OwnerAssignmentNotAllowed()
 
@@ -103,14 +107,16 @@ class HomeUserService:
         if not (self.current_user.is_admin or is_owner):
             raise HomePermissionDenied(home_id=home_id)
 
-        home_user = await self.home_user_repo.get(user_id=user_id, home_id=home_id)
+        home_user = await self.home_user_repo.get(
+            user_id=UserId(user_id), home_id=home_id
+        )
         if not home_user:
-            raise TargetUserDoesNotExist(target_user_email="")
+            raise TargetUserDoesNotExist(email="")
 
         home_user.user_type = new_role
         await self.session.flush()
 
-    async def remove_user_from_home(self, home_id: HomeId, user_id: int):
+    async def remove_user_from_home(self, home_id: HomeId, user_id: UUID):
         home = await self.home_repo.get_by_id(home_id)
         if not home:
             raise HomeNotFound(home_id)
@@ -122,9 +128,11 @@ class HomeUserService:
         if not (self.current_user.is_admin or is_owner):
             raise HomePermissionDenied(home_id=home_id)
 
-        home_user = await self.home_user_repo.get(user_id=user_id, home_id=home_id)
+        home_user = await self.home_user_repo.get(
+            user_id=UserId(user_id), home_id=home_id
+        )
         if not home_user:
-            raise TargetUserDoesNotExist(target_user_email="")
+            raise TargetUserDoesNotExist(email="")
 
         await self.session.delete(home_user)
         await self.session.flush()

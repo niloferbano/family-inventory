@@ -112,7 +112,7 @@ class HomeService:
                     user_id=user_id,
                     username=username,
                     email=email,
-                    user_type=user_type.value,
+                    user_type=user_type,
                 )
             )
 

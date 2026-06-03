@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
+from typing import Any, cast
 from uuid import uuid4
 
 import sqlalchemy as sa
@@ -47,7 +48,7 @@ class InventoryRepository:
 
     async def add_items(
         self, home_id: HomeId, items: list[InventoryItem]
-    ) -> list[InventoryItem] | None:
+    ) -> list[InventoryItem]:
         names = [item.name for item in items]
 
         existing = await self.session.execute(
@@ -61,7 +62,7 @@ class InventoryRepository:
         new_items = [i for i in items if i.name not in existing_names]
 
         if not new_items:
-            raise InventoryItemNameConflict(existing_names)
+            raise InventoryItemNameConflict(list(existing_names))
 
         self.session.add_all(new_items)
         await self.session.flush()
@@ -181,7 +182,10 @@ class InventoryRepository:
             .returning(InventoryExpiryAlert.id)
         )
 
-        alert_ids = list((await self.session.execute(insert_stmt)).scalars().all())
+        alert_ids = [
+            InventoryExpiryAlertId(alert_id)
+            for alert_id in (await self.session.execute(insert_stmt)).scalars().all()
+        ]
         return alert_ids
 
     async def get_unpublished_alerts_with_items(
@@ -245,7 +249,7 @@ class InventoryRepository:
             )
         )
         res = await self.session.execute(stmt)
-        return int(res.rowcount or 0)
+        return int(cast(Any, res).rowcount or 0)
 
     async def mark_alerts_failed(
         self,
@@ -268,4 +272,4 @@ class InventoryRepository:
             )
         )
         res = await self.session.execute(stmt)
-        return int(res.rowcount or 0)
+        return int(cast(Any, res).rowcount or 0)

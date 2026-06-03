@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import date
-from uuid import UUID
 
 from app.apis.inventory.repository import InventoryRepository
 from app.apis.inventory.services.expiry_service import InventoryExpiryService
@@ -42,16 +41,20 @@ async def run_inventory_expiry_job(
         async with db.begin() as session:
             repo = InventoryRepository(session)
 
-            expiring_alert_ids: list[UUID] = await repo.register_expiry_alerts(
-                alert_type=InventoryAlertType.EXPIRING_SOON,
-                today=today,
-                days=days,
-                limit=limit,
+            expiring_alert_ids: list[InventoryExpiryAlertId] = (
+                await repo.register_expiry_alerts(
+                    alert_type=InventoryAlertType.EXPIRING_SOON,
+                    today=today,
+                    days=days,
+                    limit=limit,
+                )
             )
-            expired_alert_ids: list[UUID] = await repo.register_expiry_alerts(
-                alert_type=InventoryAlertType.EXPIRED,
-                today=today,
-                limit=limit,
+            expired_alert_ids: list[InventoryExpiryAlertId] = (
+                await repo.register_expiry_alerts(
+                    alert_type=InventoryAlertType.EXPIRED,
+                    today=today,
+                    limit=limit,
+                )
             )
 
         logger.info(

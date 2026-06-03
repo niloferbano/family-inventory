@@ -30,7 +30,10 @@ class NotificationSubscriptionsService:
     async def list_my_subscriptions(
         self, *, user_id: UUID, home_id: UUID | None = None
     ):
-        return await self.repo.list_for_user(user_id=user_id, home_id=home_id)
+        return await self.repo.list_for_user(
+            user_id=UserId(user_id),
+            home_id=HomeId(home_id) if home_id is not None else None,
+        )
 
     async def create_subscription(
         self, *, user_id: UUID, req: SubscriptionCreateRequest
@@ -89,6 +92,7 @@ class NotificationSubscriptionsService:
         try:
             self.session.add(sub)
             await self.session.flush()
+            await self.session.refresh(sub)
         except IntegrityError as exc:
             raise DomainConflictError(
                 code=ErrorCode.SUBSCRIPTION_DUPLICATE,

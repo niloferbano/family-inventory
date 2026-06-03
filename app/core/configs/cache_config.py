@@ -1,8 +1,7 @@
-from pydantic import computed_field
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
 
 
-class CacheConfiguration(BaseSettings):
+class CacheConfiguration(BaseModel):
     host: str = "localhost"
     port: int = 6379
     db: int = 0
@@ -10,7 +9,6 @@ class CacheConfiguration(BaseSettings):
     password: str | None = None
     timeout: int = 20
 
-    @computed_field
     @property
     def url(self) -> str:
         auth = ""

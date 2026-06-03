@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol, cast
 
 import aio_pika
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 class LogBroker(EventBroker):
     async def connect(self) -> None:
-        logger.infor(
+        logger.info(
             "LOG BROKER: using LogBroker - events will be logged, not published to a real broker"
         )
         return
@@ -145,13 +145,21 @@ class RabbitMQBroker(EventBroker):
         self._exchange: aio_pika.Exchange | None = None
 
     async def connect(self) -> None:
-        self._connection = await aio_pika.connect_robust(self.amqp_url)
-        self._channel = await self._connection.channel(publisher_confirms=True)
+        self._connection = cast(
+            aio_pika.RobustConnection, await aio_pika.connect_robust(self.amqp_url)
+        )
+        self._channel = cast(
+            aio_pika.RobustChannel,
+            await self._connection.channel(publisher_confirms=True),
+        )
 
-        self._exchange = await self._channel.declare_exchange(
-            self.exchange_name,
-            aio_pika.ExchangeType.TOPIC,
-            durable=self.durable,
+        self._exchange = cast(
+            aio_pika.Exchange,
+            await self._channel.declare_exchange(
+                self.exchange_name,
+                aio_pika.ExchangeType.TOPIC,
+                durable=self.durable,
+            ),
         )
 
         await setup_mq_infrastructure(
@@ -196,7 +204,7 @@ class RabbitMQBroker(EventBroker):
 
         correlation_id = str(key) if key else None
 
-        headers = dict(event.headers or {})
+        headers: dict[str, Any] = dict(event.headers or {})
         if event.key:
             headers["x-event-key"] = str(event.key)
         if event_id:
