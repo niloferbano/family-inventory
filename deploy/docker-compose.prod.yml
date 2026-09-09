@@ -1,0 +1,46 @@
+name: family-inventory
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.infra.yml
+      service: postgres
+  rabbitmq:
+    extends:
+      file: docker-compose.infra.yml
+      service: rabbitmq
+  redis:
+    extends:
+      file: docker-compose.infra.yml
+      service: redis
+  migrate:
+    extends:
+      file: docker-compose.app.yml
+      service: migrate
+  api:
+    extends:
+      file: docker-compose.app.yml
+      service: api
+  worker:
+    extends:
+      file: docker-compose.app.yml
+      service: worker
+  inventory-expiry-cron:
+    extends:
+      file: docker-compose.app.yml
+      service: inventory-expiry-cron
+  web:
+    extends:
+      file: docker-compose.frontend.yml
+      service: web
+
+volumes:
+  pgdata:
+  rabbitmqdata:
+  redisdata:
+  caddydata:
+  caddyconfig:
+
+networks:
+  backend:
+    driver: bridge

@@ -1,0 +1,30 @@
+name: family-inventory
+
+services:
+  web:
+    depends_on:
+      api:
+        condition: service_healthy
+    image: family-inventory-web:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    networks: [backend]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+volumes:
+  caddydata:
+  caddyconfig:
+networks:
+  backend:
+    driver: bridge

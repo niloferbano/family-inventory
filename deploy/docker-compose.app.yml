@@ -1,0 +1,45 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+x-app: &app
+  image: family-inventory:${IMAGE_TAG:-local}
+  restart: unless-stopped
+  init: true
+  logging: *logging
+  networks: [backend]
+  env_file:
+    - ../.env.docker
+  depends_on: &dependencies
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  migrate:
+    <<: *app
+    healthcheck:
+      disable: true
+    restart: 'no'
+    command: [alembic, upgrade, head]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    <<: *app
+  worker:
+    <<: *app
+    healthcheck:
+      disable: true
+    command: [python, -m, app.apis.notifications.worker]
+  inventory-expiry-cron:
+    <<: *app
+    healthcheck:
+      disable: true
+    command: [sh, -c, 'while true; do python -m app.jobs.inventory_expiry_job; sleep "$${EXPIRY_INTERVAL_SECONDS}"; done']

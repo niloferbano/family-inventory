@@ -107,6 +107,11 @@ async def read_root():
     return {"message": "Hello from Family Inventory API!"}
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 def make_uvicorn_log_config():
     cfg = dict(LOGGING_CONFIG)  # shallow copy is fine; we’ll only tweak dict values
     cfg["loggers"] = dict(cfg.get("loggers", {}))

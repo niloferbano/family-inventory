@@ -208,3 +208,9 @@ __marimo__/
 frontend/node_modules/
 frontend/dist/
 .vscode
+.env.*
+!.env.*.example
+
+# Generated local test reports and macOS metadata
+/test-results/
+.DS_Store

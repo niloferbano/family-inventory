@@ -10,15 +10,20 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.brokers import EventBroker, EventEnvelope
-from app.apis.notifications.models import (NotificationDelivery,
-                                           NotificationEvent,
-                                           NotificationOutbox)
+from app.apis.notifications.models import (
+    NotificationDelivery,
+    NotificationEvent,
+    NotificationOutbox,
+)
 from app.apis.notifications.types import DeliveryStatus, NotificationChannel
 from app.apis.notifications.worker.channels import ChannelSender
 from app.apis.notifications.worker.handlers import (
-    ClaimedDelivery, build_failure_results_for_claimed,
-    claim_deliveries_to_send, finalize_delivery_results,
-    send_claimed_deliveries)
+    ClaimedDelivery,
+    build_failure_results_for_claimed,
+    claim_deliveries_to_send,
+    finalize_delivery_results,
+    send_claimed_deliveries,
+)
 from app.core.database.base import NotificationEventId
 from app.core.database.session import session_scope
 
@@ -347,20 +352,17 @@ async def run_sweeper_loop(
                 worker_id=worker_id,
             )
 
-            # Only attempt outbox publishing when we actually processed something.
-            # This prevents constant DB polling when the system is idle.
             if processed:
                 logger.info("Sweeper processed %d delivery event(s)", processed)
 
-                if broker is not None:
-                    outbox_sent = await sweep_outbox_once(
-                        sessionmaker=sessionmaker,
-                        broker=broker,
-                    )
-                    if outbox_sent:
-                        logger.info(
-                            "Sweeper published %d outbox message(s)", outbox_sent
-                        )
+            # Outbox recovery must also run when no deliveries need retrying.
+            if broker is not None:
+                outbox_sent = await sweep_outbox_once(
+                    sessionmaker=sessionmaker,
+                    broker=broker,
+                )
+                if outbox_sent:
+                    logger.info("Sweeper published %d outbox message(s)", outbox_sent)
         except asyncio.CancelledError:
             raise
         except Exception:
