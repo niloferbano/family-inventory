@@ -20,21 +20,22 @@ prod:
 	$(POETRY) run uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --workers 4
 
 # ---------- DOCKER ----------
+LOCAL_COMPOSE = docker compose --env-file .env -f deploy/docker-compose.yml
 up:
-	docker compose up -d
+	$(LOCAL_COMPOSE) up -d
 
 down:
-	docker compose down
+	$(LOCAL_COMPOSE) down
 
 remove-all:
-	docker compose down -v --remove-orphans
+	$(LOCAL_COMPOSE) down -v --remove-orphans
 
 logs:
-	docker compose logs -f
+	$(LOCAL_COMPOSE) logs -f
 
 restart:
-	docker compose down
-	docker compose up -d
+	$(LOCAL_COMPOSE) down
+	$(LOCAL_COMPOSE) up -d
 
 # ---------- DATABASE (CLI WRAPPED) ----------
 db-reset:
@@ -122,3 +123,30 @@ ci-up-frontend:
 
 run-frontend:
 	npm run dev --prefix $(FRONTEND_DIR)
+
+# ---------- CONTAINER DEPLOYMENT ----------
+DEPLOY = docker compose --env-file .env -p family-inventory -f deploy/docker-compose.prod.yml
+TEST_COMPOSE = docker compose -p family-inventory-test -f deploy/docker-compose.test.yml
+
+.PHONY: deploy deploy-down deploy-logs infra-up test-docker test-docker-down
+deploy:
+	$(DEPLOY) up -d --no-build
+
+deploy-down:
+	$(DEPLOY) down
+
+deploy-logs:
+	$(DEPLOY) logs -f --tail=100
+
+infra-up:
+	$(DEPLOY) up -d postgres rabbitmq redis
+
+test-docker:
+	$(TEST_COMPOSE) up --build --abort-on-container-exit --exit-code-from test
+
+test-docker-down:
+	$(TEST_COMPOSE) down -v
+
+.PHONY: deploy-frontend
+deploy-frontend:
+	$(DEPLOY) up -d --no-build web

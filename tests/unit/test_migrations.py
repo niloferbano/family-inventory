@@ -1,3 +1,4 @@
+import os
 import uuid
 from pathlib import Path
 
@@ -31,6 +32,8 @@ def _can_connect(db_url: str) -> bool:
 def test_alembic_upgrade_head(monkeypatch):
     sync_db_url = settings.TEST_DATABASE_URL.replace("+asyncpg", "")
     if not _can_connect(sync_db_url):
+        if os.getenv("REQUIRE_TEST_DATABASE") == "true":
+            pytest.fail("Required test database unavailable for Alembic migration test")
         pytest.skip("Test database unavailable for Alembic migration test")
 
     schema = f"alembic_test_{uuid.uuid4().hex}"

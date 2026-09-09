@@ -1,3 +1,4 @@
+import os
 import uuid
 
 import pytest
@@ -74,7 +75,7 @@ async def mock_db(worker_schema):
             await conn.run_sync(SQLBase.metadata.create_all)
     except Exception as exc:
         await mock_db.disconnect()
-        if _is_db_connect_error(exc):
+        if _is_db_connect_error(exc) and os.getenv("REQUIRE_TEST_DATABASE") != "true":
             pytest.skip(f"Test database unavailable: {exc}")
         raise
 

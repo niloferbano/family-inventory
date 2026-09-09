@@ -45,10 +45,14 @@ def make_uvicorn_log_config():
 
 @app.command("server")
 def run_server(
-    host: str = settings.HOST,
-    port: int = settings.PORT,
-    reload: bool = settings.DEBUG,
-    workers: int = settings.WORKERS,
+    host: str = typer.Option(settings.HOST, "--host", help="Host address to bind to."),
+    port: int = typer.Option(settings.PORT, "--port", help="Port to listen on."),
+    reload: bool = typer.Option(
+        settings.DEBUG, "--reload/--no-reload", help="Reload when source files change."
+    ),
+    workers: int = typer.Option(
+        settings.WORKERS, "--workers", help="Number of server worker processes."
+    ),
 ):
     uvicorn.run(
         "app.main:app",
@@ -62,3 +66,7 @@ def run_server(
         access_log=False,  # still good to keep
         log_config=make_uvicorn_log_config(),
     )
+
+
+if __name__ == "__main__":
+    app()

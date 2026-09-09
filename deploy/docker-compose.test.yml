@@ -1,0 +1,32 @@
+name: family-inventory-test
+services:
+  postgres-test:
+    image: postgres:16
+    env_file:
+      - ../.env.docker.test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U family_test -d family_test]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis-test:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  test:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: test
+    env_file:
+      - ../.env.docker.test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy

@@ -1,0 +1,29 @@
+# Local infrastructure for running Python and Vite on the host.
+name: family-inventory
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.infra.yml
+      service: postgres
+    ports: ['127.0.0.1:5432:5432']
+  rabbitmq:
+    extends:
+      file: docker-compose.infra.yml
+      service: rabbitmq
+    ports: ['127.0.0.1:5672:5672', '127.0.0.1:15672:15672']
+  redis:
+    extends:
+      file: docker-compose.infra.yml
+      service: redis
+    ports: ['127.0.0.1:6379:6379']
+  smtp:
+    image: axllent/mailpit:v1.27
+    ports: ['127.0.0.1:8025:1025', '127.0.0.1:8026:8025']
+volumes:
+  pgdata:
+  rabbitmqdata:
+  redisdata:
+networks:
+  backend:
+    driver: bridge

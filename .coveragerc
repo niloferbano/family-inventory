@@ -1,0 +1,6 @@
+[run]
+branch = True
+source = app,family_cli
+
+[report]
+include_namespace_packages = True
