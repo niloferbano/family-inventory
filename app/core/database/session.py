@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 class DBManager:
     def __init__(self, model_base: Type[DeclarativeBase], db_url: str | URL, **kwargs):
         self.model_base = model_base
-        logger.info("✅ CONNECTING TO DATABASE: %s", db_url)
+        logger.info("Initializing database connection pool")
         # MUST specify future=True for async
         engine_kwargs = {
             "echo": settings.DEBUG,

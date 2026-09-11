@@ -219,15 +219,17 @@ On a Contabo Linux VPS with Docker Engine, the Docker Compose v2 plugin, Git, an
 3. Copy the deployment template:
 
    ```bash
-   cp .env.deploy.example .env.deploy
+   cp .env.example .env
    cp .env.docker.example .env.docker
-   chmod 600 .env.deploy
+   chmod 600 .env .env.docker
    ```
 
-4. Edit `.env.deploy`. Set `SITE_ADDRESS` to your hostname and fill in `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`, and `JWT_SECRET_KEY`. Generate a separate value for each with `openssl rand -hex 32`. Use URL-safe credentials (hex avoids URL escaping issues). Configure a real SMTP provider for email delivery.
-5. Build and start:
+4. Edit `.env`. Set `SITE_ADDRESS` to your hostname and fill in `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`, and `JWT_SECRET_KEY`. Generate a separate value for each with `openssl rand -hex 32`. Use URL-safe credentials (hex avoids URL escaping issues). Configure a real SMTP provider for email delivery.
+5. Build images with tags matching `IMAGE_TAG`, then start (example uses `local`):
 
    ```bash
+   docker build --target runtime -f deploy/Dockerfile -t family-inventory:local .
+   docker build -f deploy/frontend.Dockerfile -t family-inventory-web:local .
    make deploy
    make deploy-logs
    ```
@@ -235,7 +237,7 @@ On a Contabo Linux VPS with Docker Engine, the Docker Compose v2 plugin, Git, an
 The equivalent Compose command is:
 
 ```bash
-docker compose --env-file .env.deploy -p family-inventory \
+docker compose --env-file .env -p family-inventory \
   -f deploy/docker-compose.prod.yml up -d --no-build
 ```
 
@@ -250,7 +252,7 @@ Build or load the desired backend and frontend images, set `IMAGE_TAG` to their 
 For infra only, use `make infra-up`. For an interactive admin command:
 
 ```bash
-docker compose --env-file .env.deploy -p family-inventory \
+docker compose --env-file .env -p family-inventory \
   -f deploy/docker-compose.prod.yml \
   exec api python -m family_cli.main user create-admin
 ```
@@ -275,7 +277,7 @@ The first command builds the test image and returns pytest's exit status. The se
 
 Existing local PostgreSQL and Redis named volumes retain their original names. Do not use `down -v` against a deployment whose data you want to keep.
 
-Application containers load their settings from `.env.docker` (copy `.env.docker.example` first). Its credential placeholders resolve from `.env` locally or `--env-file .env.deploy` during deployment. Keep using the deployment env file for Compose settings such as infrastructure credentials and image tags.
+Application containers load their settings from `.env.docker` (copy `.env.docker.example` first). Its credential placeholders resolve from `.env` locally or `--env-file .env` during deployment. Keep using the deployment env file for Compose settings such as infrastructure credentials and image tags.
 
 ### Deployment file layout
 
@@ -290,7 +292,7 @@ make deploy-frontend
 Use the production entry point so Compose resolves all dependencies:
 
 ```bash
-docker compose --env-file .env.deploy -p family-inventory \
+docker compose --env-file .env -p family-inventory \
   -f deploy/docker-compose.prod.yml up -d --no-build web
 ```
 
@@ -304,3 +306,5 @@ docker build -f deploy/frontend.Dockerfile -t family-inventory-web:local .
 ```
 
 For another host, transfer these images with `docker save` / `docker load`, or pull and tag your registry images before deployment. Test Compose continues to build its isolated test image.
+
+See [the deployment guide](docs/deployment.md) for environment setup, updates, and database recovery.
