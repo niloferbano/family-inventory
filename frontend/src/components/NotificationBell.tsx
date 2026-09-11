@@ -23,7 +23,7 @@ const buildWsUrl = (token: string) => {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   return `${protocol}://${window.location.host}${basePath.replace(
     /\/$/,
-    ""
+    "",
   )}/notifications/ws?token=${encodeURIComponent(token)}`;
 };
 
@@ -38,7 +38,17 @@ const formatTimestamp = (value: string | null) => {
   return date.toLocaleString();
 };
 
-export default function NotificationBell() {
+type NotificationBellProps = {
+  onSelectItem?: (notification: InAppNotification) => void;
+};
+
+export default function NotificationBell({
+  onSelectItem,
+}: NotificationBellProps) {
+  console.log(
+    "DEBUG: Does NotificationBell see onSelectItem?",
+    typeof onSelectItem,
+  );
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -73,6 +83,7 @@ export default function NotificationBell() {
     void refreshUnread();
   }, [loadInbox, refreshUnread]);
 
+  // Handle auto-marking visible notifications as read when dropdown opens
   useEffect(() => {
     if (!open) {
       return;
@@ -84,22 +95,23 @@ export default function NotificationBell() {
     const markAll = async () => {
       await Promise.all(
         unreadItems.map((item) =>
-          markNotificationRead(item.id).catch(() => null)
-        )
+          markNotificationRead(item.id).catch(() => null),
+        ),
       );
       const now = new Date().toISOString();
       setNotifications((prev) =>
         prev.map((item) =>
           unreadItems.some((unreadItem) => unreadItem.id === item.id)
             ? { ...item, read_at: item.read_at ?? now }
-            : item
-        )
+            : item,
+        ),
       );
       setUnread(0);
     };
     void markAll();
   }, [open, notifications]);
 
+  // Close dropdown on outside click or escape key
   useEffect(() => {
     if (!open) {
       return;
@@ -122,6 +134,7 @@ export default function NotificationBell() {
     };
   }, [open]);
 
+  // WebSocket connection for live notifications
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -186,6 +199,29 @@ export default function NotificationBell() {
       }
     };
   }, [refreshUnread]);
+
+  const handleNotificationClick = async (item: InAppNotification) => {
+    console.log("Notification card clicked!", item);
+
+    if (!item.read_at) {
+      try {
+        await markNotificationRead(item.id);
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.id === item.id ? { ...n, read_at: new Date().toISOString() } : n,
+          ),
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    setOpen(false);
+
+    if (onSelectItem) {
+      onSelectItem(item);
+    }
+  };
 
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
@@ -267,12 +303,24 @@ export default function NotificationBell() {
             {notifications.map((item) => (
               <div
                 key={item.id}
+
+                onClick={() => handleNotificationClick(item)}
                 style={{
                   border: "1px solid #f0f0f0",
                   borderRadius: 10,
                   padding: 10,
                   background: item.read_at ? "#fafafa" : "#f7f9ff",
+                  cursor: "pointer",
+                  transition: "background 0.2s ease",
                 }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "#f0f4ff")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = item.read_at
+                    ? "#fafafa"
+                    : "#f7f9ff")
+                }
               >
                 <div style={{ fontSize: 11, color: "#666" }}>
                   {formatTimestamp(item.created_at)}

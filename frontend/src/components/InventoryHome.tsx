@@ -1,6 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { clearToken } from "../api/auth";
-import { addHomeMember, createHome, HomeSummary, listHomes, UserType } from "../api/homes";
+import {
+  addHomeMember,
+  createHome,
+  HomeSummary,
+  listHomes,
+  UserType,
+} from "../api/homes";
 import {
   InventoryCategory,
   InventoryItem,
@@ -9,10 +21,14 @@ import {
   updateInventoryItem,
 } from "../api/inventory";
 import AddInventory from "./AddInventory";
+import NotificationBell from "./NotificationBell";
+import { useSearchParams } from "react-router-dom";
 
 const isUnauthorized = (err: unknown) => {
   const message = String(err ?? "");
-  return message.includes("401") || message.toLowerCase().includes("unauthorized");
+  return (
+    message.includes("401") || message.toLowerCase().includes("unauthorized")
+  );
 };
 
 const CATEGORY_OPTIONS: Array<{ value: InventoryCategory; label: string }> = [
@@ -34,7 +50,31 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   const [loadingHomes, setLoadingHomes] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
+
+  const [searchParams] = useSearchParams();
+  const urlHomeId = searchParams.get("home");
+  const highlightItemName = searchParams.get("highlight")?.toLowerCase() || "";
+
+  // Reference map for auto-scrolling to highlighted items
+  const itemRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  // When homes load OR when the URL parameter changes, update active homeId
+  useEffect(() => {
+    if (urlHomeId && homes.some((h) => h.home_id === urlHomeId)) {
+      setHomeId(urlHomeId);
+    }
+  }, [urlHomeId, homes]);
+
+  // Modal States
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [showCreateHomeForm, setShowCreateHomeForm] = useState(false);
+  const [showAddMemberForm, setShowAddMemberForm] = useState(false);
+
+  // Sorting State
+  const [sortBy, setSortBy] = useState<"default" | "category" | "expiry">(
+    "default",
+  );
+
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({
     name: "",
@@ -46,12 +86,13 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   });
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+
+  // Home & Member form states
   const [newHomeName, setNewHomeName] = useState("");
   const [creatingHome, setCreatingHome] = useState(false);
   const [homeFormError, setHomeFormError] = useState<string | null>(null);
   const [homeFormSuccess, setHomeFormSuccess] = useState<string | null>(null);
-  const [showCreateHomeForm, setShowCreateHomeForm] = useState(false);
-  const [showAddMemberForm, setShowAddMemberForm] = useState(false);
+
   const [memberForm, setMemberForm] = useState({
     homeId: "",
     email: "",
@@ -59,7 +100,9 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   });
   const [addingMember, setAddingMember] = useState(false);
   const [memberFormError, setMemberFormError] = useState<string | null>(null);
-  const [memberFormSuccess, setMemberFormSuccess] = useState<string | null>(null);
+  const [memberFormSuccess, setMemberFormSuccess] = useState<string | null>(
+    null,
+  );
 
   const handleLogout = useCallback(() => {
     clearToken();
@@ -72,8 +115,8 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     try {
       const homesList = await listHomes();
       setHomes(homesList);
-      if (homesList.length > 0) {
-        setHomeId((current) => current || homesList[0].home_id);
+      if (homesList.length > 0 && !homeId && !urlHomeId) {
+        setHomeId(homesList[0].home_id);
       }
     } catch (err) {
       if (isUnauthorized(err)) {
@@ -84,7 +127,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     } finally {
       setLoadingHomes(false);
     }
-  }, [handleLogout]);
+  }, [handleLogout, homeId, urlHomeId]);
 
   const loadItems = useCallback(
     async (selectedHomeId: string) => {
@@ -104,16 +147,16 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
         setLoadingItems(false);
       }
     },
-    [handleLogout]
+    [handleLogout],
   );
 
   useEffect(() => {
-    loadHomes();
+    void loadHomes();
   }, [loadHomes]);
 
   useEffect(() => {
     if (homeId) {
-      loadItems(homeId);
+      void loadItems(homeId);
     }
   }, [homeId, loadItems]);
 
@@ -123,9 +166,24 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     }
   }, [homeId, memberForm.homeId]);
 
+  // Auto-scroll and highlight target item from URL search query
+  useEffect(() => {
+    if (highlightItemName && items.length > 0) {
+      const matchedItem = items.find((i) =>
+        i.name.toLowerCase().includes(highlightItemName),
+      );
+      if (matchedItem && itemRefs.current[matchedItem.id]) {
+        itemRefs.current[matchedItem.id]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }
+  }, [highlightItemName, items]);
+
   const selectedHome = useMemo(
     () => homes.find((home) => home.home_id === homeId),
-    [homes, homeId]
+    [homes, homeId],
   );
 
   const startEdit = (item: InventoryItem) => {
@@ -165,7 +223,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
         notes: editValues.notes.trim() ? editValues.notes : null,
       });
       setItems((prev) =>
-        prev.map((item) => (item.id === updated.id ? updated : item))
+        prev.map((item) => (item.id === updated.id ? updated : item)),
       );
       setEditingItemId(null);
     } catch (err) {
@@ -271,171 +329,380 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  // Sorting Logic
+  const sortedItems = [...items].sort((a, b) => {
+    if (sortBy === "category") {
+      return (a.category || "").localeCompare(b.category || "");
+    } else if (sortBy === "expiry") {
+      if (!a.expiry_date) return 1;
+      if (!b.expiry_date) return -1;
+      return (
+        new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime()
+      );
+    }
+    return 0;
+  });
+
   return (
     <div style={{ maxWidth: 960, margin: "1rem auto", padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
         <div>
           <h3 style={{ margin: 0 }}>Inventory Home</h3>
           <p style={{ margin: "4px 0 0", color: "#555" }}>
-            {selectedHome ? `Home: ${selectedHome.name}` : "Select a home to view inventory."}
+            {selectedHome
+              ? `Home: ${selectedHome.name}`
+              : "Select a home to view inventory."}
           </p>
         </div>
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <h4 style={{ margin: 0 }}>Your Homes</h4>
-          <button
-            type="button"
-            onClick={() => {
-              if (showCreateHomeForm) {
-                setShowCreateHomeForm(false);
-                return;
-              }
-              setHomeFormError(null);
-              setHomeFormSuccess(null);
-              setShowCreateHomeForm(true);
-            }}
-          >
-            {showCreateHomeForm ? "Close Create Home" : "Create Home"}
-          </button>
-        </div>
-        {loadingHomes ? (
-          <div style={{ marginTop: 8 }}>Loading homes...</div>
-        ) : homes.length === 0 ? (
-          <div style={{ marginTop: 8, color: "#555" }}>No homes found for this account yet.</div>
-        ) : (
-          <div style={{ marginTop: 12, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-            {homes.map((home) => {
-              const isActive = home.home_id === homeId;
-              const memberCount = home.members?.length ?? 0;
-              return (
-                <button
-                  key={home.home_id}
-                  type="button"
-                  onClick={() => setHomeId(home.home_id)}
-                  style={{
-                    textAlign: "left",
-                    borderRadius: 12,
-                    padding: 12,
-                    border: isActive ? "2px solid #1c1b1f" : "1px solid #e0e0e0",
-                    background: "#fff",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 600 }}>{home.name}</div>
-                  <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
-                    Members: {memberCount}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <h4 style={{ marginBottom: 8 }}>Manage Homes</h4>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => {
-                if (showAddMemberForm) {
-                  setShowAddMemberForm(false);
-                  return;
-                }
-                setMemberFormError(null);
-                setMemberFormSuccess(null);
-                setShowAddMemberForm(true);
-              }}
-            >
-              {showAddMemberForm ? "Close Add Member" : "Add Member"}
-            </button>
-          </div>
-        </div>
-        <div
+      {/* Action Buttons Bar */}
+      <div
+        style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap" }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setHomeFormError(null);
+            setHomeFormSuccess(null);
+            setShowCreateHomeForm(true);
+          }}
           style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            background: "#4b5563",
+            color: "white",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: 6,
+            fontWeight: 600,
+            cursor: "pointer",
           }}
         >
-          {showCreateHomeForm && (
-            <form
-              onSubmit={submitNewHome}
+          + Create Home
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMemberFormError(null);
+            setMemberFormSuccess(null);
+            setShowAddMemberForm(true);
+          }}
+          disabled={homes.length === 0}
+          style={{
+            background: "#10b981",
+            color: "white",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: 6,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + Add Member
+        </button>
+      </div>
+
+      {/* CREATE HOME POPUP MODAL */}
+      {showCreateHomeForm && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: 24,
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 420,
+              boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div
               style={{
-                border: "1px solid #eee",
-                borderRadius: 12,
-                padding: 12,
-                background: "#fafafa",
-                display: "grid",
-                gap: 10,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+                borderBottom: "1px solid #e5e7eb",
+                paddingBottom: 10,
               }}
             >
-              <div style={{ fontWeight: 600 }}>Create a home</div>
-              <label style={{ display: "grid", gap: 4 }}>
-                Home name
+              <h3 style={{ margin: 0, fontSize: "1.2rem", color: "#111827" }}>
+                Create a Home
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateHomeForm(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "1.2rem",
+                  color: "#6b7280",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={submitNewHome}
+              style={{ display: "flex", flexDirection: "column", gap: 12 }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Home Name *
+                </label>
                 <input
                   value={newHomeName}
                   onChange={(e) => setNewHomeName(e.target.value)}
                   placeholder="e.g., Main House"
+                  required
+                  style={{
+                    width: "100%",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                  }}
                 />
-              </label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="submit" disabled={creatingHome}>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button
+                  type="submit"
+                  disabled={creatingHome}
+                  style={{
+                    flex: 2,
+                    background: "#2563eb",
+                    color: "white",
+                    border: "none",
+                    padding: "10px",
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
                   {creatingHome ? "Creating..." : "Create Home"}
                 </button>
-                <button type="button" onClick={() => setShowCreateHomeForm(false)} disabled={creatingHome}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateHomeForm(false)}
+                  disabled={creatingHome}
+                  style={{
+                    flex: 1,
+                    background: "#e5e7eb",
+                    color: "#374151",
+                    border: "none",
+                    padding: "10px",
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
                   Cancel
                 </button>
               </div>
-              {homeFormSuccess && <div style={{ color: "green" }}>{homeFormSuccess}</div>}
-              {homeFormError && <div style={{ color: "crimson" }}>{homeFormError}</div>}
-            </form>
-          )}
 
-          {showAddMemberForm && (
-            <form
-              onSubmit={submitAddMember}
+              {homeFormSuccess && (
+                <div
+                  style={{
+                    color: "#059669",
+                    background: "#ecfdf5",
+                    padding: 8,
+                    borderRadius: 6,
+                    textAlign: "center",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {homeFormSuccess}
+                </div>
+              )}
+              {homeFormError && (
+                <div
+                  style={{
+                    color: "#dc2626",
+                    background: "#fef2f2",
+                    padding: 8,
+                    borderRadius: 6,
+                    textAlign: "center",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {homeFormError}
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD MEMBER POPUP MODAL */}
+      {showAddMemberForm && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: 24,
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 420,
+              boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div
               style={{
-                border: "1px solid #eee",
-                borderRadius: 12,
-                padding: 12,
-                background: "#fafafa",
-                display: "grid",
-                gap: 10,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+                borderBottom: "1px solid #e5e7eb",
+                paddingBottom: 10,
               }}
             >
-              <div style={{ fontWeight: 600 }}>Add a member</div>
-              <label style={{ display: "grid", gap: 4 }}>
-                Home
+              <h3 style={{ margin: 0, fontSize: "1.2rem", color: "#111827" }}>
+                Add a Member
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddMemberForm(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "1.2rem",
+                  color: "#6b7280",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={submitAddMember}
+              style={{ display: "flex", flexDirection: "column", gap: 12 }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Home *
+                </label>
                 <select
                   value={memberForm.homeId}
                   onChange={(e) =>
-                    setMemberForm((prev) => ({ ...prev, homeId: e.target.value }))
+                    setMemberForm((prev) => ({
+                      ...prev,
+                      homeId: e.target.value,
+                    }))
                   }
                   disabled={loadingHomes || homes.length === 0}
+                  style={{
+                    width: "100%",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    background: "white",
+                  }}
                 >
-                  <option value="">Select</option>
+                  <option value="">Select a home</option>
                   {homes.map((home) => (
                     <option key={home.home_id} value={home.home_id}>
                       {home.name}
                     </option>
                   ))}
                 </select>
-              </label>
-              <label style={{ display: "grid", gap: 4 }}>
-                Member email
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Member Email *
+                </label>
                 <input
                   type="email"
                   value={memberForm.email}
-                  onChange={(e) => setMemberForm((prev) => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) =>
+                    setMemberForm((prev) => ({
+                      ...prev,
+                      email: e.target.value,
+                    }))
+                  }
                   placeholder="member@example.com"
+                  required
+                  style={{
+                    width: "100%",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                  }}
                 />
-              </label>
-              <label style={{ display: "grid", gap: 4 }}>
-                Role
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Role
+                </label>
                 <select
                   value={memberForm.role}
                   onChange={(e) =>
@@ -444,6 +711,13 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
                       role: e.target.value as UserType,
                     }))
                   }
+                  style={{
+                    width: "100%",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    background: "white",
+                  }}
                 >
                   {MEMBER_ROLE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -451,213 +725,597 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
                     </option>
                   ))}
                 </select>
-              </label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="submit" disabled={addingMember || !memberForm.homeId}>
+              </div>
+
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  color: "#6b7280",
+                  fontStyle: "italic",
+                }}
+              >
+                Members must already have an account.
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button
+                  type="submit"
+                  disabled={addingMember || !memberForm.homeId}
+                  style={{
+                    flex: 2,
+                    background: "#10b981",
+                    color: "white",
+                    border: "none",
+                    padding: "10px",
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
                   {addingMember ? "Adding..." : "Add Member"}
                 </button>
-                <button type="button" onClick={() => setShowAddMemberForm(false)} disabled={addingMember}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddMemberForm(false)}
+                  disabled={addingMember}
+                  style={{
+                    flex: 1,
+                    background: "#e5e7eb",
+                    color: "#374151",
+                    border: "none",
+                    padding: "10px",
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
                   Cancel
                 </button>
               </div>
-              <div style={{ fontSize: 12, color: "#666" }}>
-                Members must already have an account.
-              </div>
-              {memberFormSuccess && <div style={{ color: "green" }}>{memberFormSuccess}</div>}
-              {memberFormError && <div style={{ color: "crimson" }}>{memberFormError}</div>}
-            </form>
-          )}
-        </div>
-      </div>
 
-      <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <label>
-          Home
-          <select
-            value={homeId}
-            onChange={(e) => setHomeId(e.target.value)}
-            disabled={loadingHomes || homes.length === 0}
-            style={{ marginLeft: 8 }}
+              {memberFormSuccess && (
+                <div
+                  style={{
+                    color: "#059669",
+                    background: "#ecfdf5",
+                    padding: 8,
+                    borderRadius: 6,
+                    textAlign: "center",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {memberFormSuccess}
+                </div>
+              )}
+              {memberFormError && (
+                <div
+                  style={{
+                    color: "#dc2626",
+                    background: "#fef2f2",
+                    padding: 8,
+                    borderRadius: 6,
+                    textAlign: "center",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {memberFormError}
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Top Header / Context Selection Bar */}
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <label>
+            Home
+            <select
+              value={homeId}
+              onChange={(e) => setHomeId(e.target.value)}
+              disabled={loadingHomes || homes.length === 0}
+              style={{ marginLeft: 8 }}
+            >
+              <option value="">Select</option>
+              {homes.map((home) => (
+                <option key={home.home_id} value={home.home_id}>
+                  {home.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => homeId && loadItems(homeId)}
+            disabled={!homeId || loadingItems}
           >
-            <option value="">Select</option>
-            {homes.map((home) => (
-              <option key={home.home_id} value={home.home_id}>
-                {home.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={() => homeId && loadItems(homeId)} disabled={!homeId || loadingItems}>
-          Refresh
-        </button>
-        <button type="button" onClick={() => setShowAddForm((prev) => !prev)} disabled={!homeId}>
-          {showAddForm ? "Close" : "Add New Item"}
+            Refresh
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsAddModalOpen(true)}
+          disabled={!homeId}
+          style={{
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: 6,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + Add New Item
         </button>
       </div>
 
       {error && <div style={{ color: "crimson", marginTop: 12 }}>{error}</div>}
 
-      {showAddForm && (
-        <div style={{ marginTop: 16 }}>
-          <AddInventory homeId={homeId} onCreated={() => homeId && loadItems(homeId)} onLogout={handleLogout} />
+      {/* Add Item Popup Modal Overlay */}
+      {isAddModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 500,
+              boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+            }}
+          >
+            <AddInventory
+              homeId={homeId}
+              onCreated={() => {
+                if (homeId) void loadItems(homeId);
+              }}
+              onCancel={() => setIsAddModalOpen(false)}
+              onLogout={handleLogout}
+            />
+          </div>
         </div>
       )}
 
+      {/* Inventory List Section */}
       <div style={{ marginTop: 24 }}>
-        <h4 style={{ marginBottom: 8 }}>Inventory Items</h4>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <h4 style={{ margin: 0 }}>Inventory Items</h4>
+            <span style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+              Total items: <strong>{items.length}</strong>
+            </span>
+          </div>
+
+          {items.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label
+                style={{
+                  fontSize: "0.9rem",
+                  color: "#4b5563",
+                  fontWeight: 500,
+                }}
+              >
+                Sort by:
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(e.target.value as "default" | "category" | "expiry")
+                }
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  background: "white",
+                  fontSize: "0.9rem",
+                }}
+              >
+                <option value="default">Default</option>
+                <option value="category">Category</option>
+                <option value="expiry">Expiry Date</option>
+              </select>
+            </div>
+          )}
+        </div>
+
         {loadingItems ? (
           <div>Loading inventory...</div>
-        ) : items.length === 0 ? (
+        ) : sortedItems.length === 0 ? (
           <div>No inventory items found.</div>
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {items.map((item) => {
+          <div style={{ display: "grid", gap: 16 }}>
+            {sortedItems.map((item) => {
               const isEditing = editingItemId === item.id;
+              const isExpired =
+                item.expiry_date && new Date(item.expiry_date) < new Date();
+              const isHighlighted =
+                highlightItemName &&
+                item.name.toLowerCase().includes(highlightItemName);
+
               return (
                 <div
                   key={item.id}
+                  ref={(el) => {
+                    if (el) {
+                      itemRefs.current[item.id] = el;
+                    } else {
+                      delete itemRefs.current[item.id];
+                    }
+                  }}
                   style={{
-                    border: "1px solid #eee",
+                    border: isHighlighted
+                      ? "2px solid #2563eb"
+                      : "1px solid #e5e7eb",
                     borderRadius: 10,
-                    padding: 12,
+                    padding: 16,
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     gap: 12,
                     flexWrap: "wrap",
+                    background: isHighlighted ? "#eff6ff" : "white",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+                    transition: "background 0.5s ease, border 0.5s ease",
                   }}
                 >
-                <div style={{ flex: 1, minWidth: 220 }}>
-                  {isEditing ? (
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <label style={{ display: "grid", gap: 4 }}>
-                        Name
-                        <input
-                          value={editValues.name}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({ ...prev, name: e.target.value }))
-                          }
-                        />
-                      </label>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                        <label style={{ display: "grid", gap: 4 }}>
-                          Category
-                          <select
-                            value={editValues.category}
+                  <div style={{ flex: 1, minWidth: 240 }}>
+                    {isEditing ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <label
+                          style={{
+                            display: "grid",
+                            gap: 4,
+                            fontSize: "0.85rem",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Name
+                          <input
+                            value={editValues.name}
                             onChange={(e) =>
                               setEditValues((prev) => ({
                                 ...prev,
-                                category: e.target.value as InventoryCategory,
+                                name: e.target.value,
                               }))
                             }
+                            style={{
+                              padding: 6,
+                              borderRadius: 4,
+                              border: "1px solid #d1d5db",
+                            }}
+                          />
+                        </label>
+                        <div
+                          style={{ display: "flex", flexWrap: "wrap", gap: 12 }}
+                        >
+                          <label
+                            style={{
+                              display: "grid",
+                              gap: 4,
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                            }}
                           >
-                            {CATEGORY_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label style={{ display: "grid", gap: 4 }}>
-                          Quantity
+                            Category
+                            <select
+                              value={editValues.category}
+                              onChange={(e) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  category: e.target.value as InventoryCategory,
+                                }))
+                              }
+                              style={{
+                                padding: 6,
+                                borderRadius: 4,
+                                border: "1px solid #d1d5db",
+                                background: "white",
+                              }}
+                            >
+                              {CATEGORY_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label
+                            style={{
+                              display: "grid",
+                              gap: 4,
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                            }}
+                          >
+                            Quantity
+                            <input
+                              type="number"
+                              min={0}
+                              value={editValues.quantity}
+                              onChange={(e) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  quantity:
+                                    e.target.value === ""
+                                      ? 0
+                                      : Number(e.target.value),
+                                }))
+                              }
+                              style={{
+                                padding: 6,
+                                borderRadius: 4,
+                                border: "1px solid #d1d5db",
+                              }}
+                            />
+                          </label>
+                          <label
+                            style={{
+                              display: "grid",
+                              gap: 4,
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                            }}
+                          >
+                            Unit
+                            <input
+                              value={editValues.unit}
+                              onChange={(e) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  unit: e.target.value,
+                                }))
+                              }
+                              style={{
+                                padding: 6,
+                                borderRadius: 4,
+                                border: "1px solid #d1d5db",
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <label
+                          style={{
+                            display: "grid",
+                            gap: 4,
+                            fontSize: "0.85rem",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Expiry Date
                           <input
-                            type="number"
-                            min={0}
-                            value={editValues.quantity}
+                            type="date"
+                            value={editValues.expiryDate}
                             onChange={(e) =>
                               setEditValues((prev) => ({
                                 ...prev,
-                                quantity:
-                                  e.target.value === "" ? 0 : Number(e.target.value),
+                                expiryDate: e.target.value,
                               }))
                             }
+                            style={{
+                              padding: 6,
+                              borderRadius: 4,
+                              border: "1px solid #d1d5db",
+                            }}
                           />
                         </label>
-                        <label style={{ display: "grid", gap: 4 }}>
-                          Unit
-                          <input
-                            value={editValues.unit}
+                        <label
+                          style={{
+                            display: "grid",
+                            gap: 4,
+                            fontSize: "0.85rem",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Notes
+                          <textarea
+                            rows={2}
+                            value={editValues.notes}
                             onChange={(e) =>
-                              setEditValues((prev) => ({ ...prev, unit: e.target.value }))
+                              setEditValues((prev) => ({
+                                ...prev,
+                                notes: e.target.value,
+                              }))
                             }
+                            style={{
+                              padding: 6,
+                              borderRadius: 4,
+                              border: "1px solid #d1d5db",
+                            }}
                           />
                         </label>
                       </div>
-                      <label style={{ display: "grid", gap: 4 }}>
-                        Expiry Date
-                        <input
-                          type="date"
-                          value={editValues.expiryDate}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({
-                              ...prev,
-                              expiryDate: e.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label style={{ display: "grid", gap: 4 }}>
-                        Notes
-                        <textarea
-                          rows={2}
-                          value={editValues.notes}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({ ...prev, notes: e.target.value }))
-                          }
-                        />
-                      </label>
-                    </div>
-                  ) : (
-                    <div>
-                      <strong>{item.name}</strong>
-                      <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
-                        {item.category} - {item.quantity} {item.unit}
-                        {item.expiry_date ? ` - exp ${item.expiry_date}` : ""}
-                      </div>
-                      {item.notes && (
-                        <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                          {item.notes}
+                    ) : (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <strong
+                            style={{ fontSize: "1.05rem", color: "#111827" }}
+                          >
+                            {item.name}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              color: "#4b5563",
+                              background: "#f3f4f6",
+                              padding: "2px 8px",
+                              borderRadius: 12,
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            {item.category}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {isEditing ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={saveEdit}
-                        disabled={savingItemId === item.id}
-                      >
-                        {savingItemId === item.id ? "Saving..." : "Save"}
-                      </button>
-                      <button type="button" onClick={cancelEdit} disabled={savingItemId === item.id}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(item)}
-                        disabled={Boolean(editingItemId) && editingItemId !== item.id}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item)}
-                        disabled={
-                          deletingItemId === item.id ||
-                          (Boolean(editingItemId) && editingItemId !== item.id)
-                        }
-                      >
-                        {deletingItemId === item.id ? "Deleting..." : "Delete"}
-                      </button>
-                    </>
-                  )}
-                </div>
+
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 16,
+                            fontSize: "0.9rem",
+                            color: "#4b5563",
+                            marginTop: 2,
+                          }}
+                        >
+                          <div>
+                            Quantity:{" "}
+                            <strong>
+                              {item.quantity} {item.unit}
+                            </strong>
+                          </div>
+                          {item.expiry_date && (
+                            <div
+                              style={{
+                                color: isExpired ? "#dc2626" : "#6b7280",
+                                fontWeight: isExpired ? 600 : 400,
+                              }}
+                            >
+                              Expires: {item.expiry_date}{" "}
+                              {isExpired && "(Expired)"}
+                            </div>
+                          )}
+                        </div>
+
+                        {item.notes && (
+                          <div
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                              marginTop: 2,
+                            }}
+                          >
+                            Note: {item.notes}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {isEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={saveEdit}
+                          disabled={savingItemId === item.id}
+                          style={{
+                            background: "#059669",
+                            color: "white",
+                            border: "none",
+                            padding: "6px 12px",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          {savingItemId === item.id ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          disabled={savingItemId === item.id}
+                          style={{
+                            background: "#e5e7eb",
+                            color: "#374151",
+                            border: "none",
+                            padding: "6px 12px",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(item)}
+                          disabled={
+                            Boolean(editingItemId) && editingItemId !== item.id
+                          }
+                          style={{
+                            background: "none",
+                            border: "1px solid #d1d5db",
+                            color: "#2563eb",
+                            padding: "6px 10px",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item)}
+                          disabled={
+                            deletingItemId === item.id ||
+                            (Boolean(editingItemId) &&
+                              editingItemId !== item.id)
+                          }
+                          style={{
+                            background: "none",
+                            border: "1px solid #d1d5db",
+                            color: "#dc2626",
+                            padding: "6px 10px",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          {deletingItemId === item.id
+                            ? "Deleting..."
+                            : "Delete"}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}

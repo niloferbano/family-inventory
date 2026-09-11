@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
                       field_validator)
 
-from app.iam.types import ActivationKey, HashedString
+from app.iam.types import HashedString
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -79,5 +79,4 @@ class TokenResponse(BaseApiSchema):
 
 
 class UserRegisterResponse(BaseApiSchema):
-    message: str = "User created. Activate your account."
-    activation_key: ActivationKey
+    message: str = "Registration received. Your activation email has been queued."

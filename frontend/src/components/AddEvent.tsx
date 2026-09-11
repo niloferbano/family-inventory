@@ -25,7 +25,10 @@ export default function AddEvent({ onLogout }: { onLogout: () => void }) {
       setMessage("");
     } catch (err: any) {
       // if unauthorized, prompt logout
-      if (String(err).includes("401") || String(err).toLowerCase().includes("unauthorized")) {
+      if (
+        String(err).includes("401") ||
+        String(err).toLowerCase().includes("unauthorized")
+      ) {
         clearToken();
         onLogout();
         return;
@@ -38,22 +41,46 @@ export default function AddEvent({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div style={{ maxWidth: 640, margin: "1rem auto", padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: 12,
+        }}
+      >
         <h3>Create Notification Event</h3>
-        <button onClick={() => { clearToken(); onLogout(); }}>Logout</button>
+        <button
+          onClick={() => {
+            clearToken();
+            onLogout();
+          }}
+        >
+          Logout
+        </button>
       </div>
 
       <form onSubmit={submit}>
         <div>
           <label>Subject</label>
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} required />
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            required
+          />
         </div>
         <div>
           <label>Message</label>
-          <textarea value={message} onChange={(e) => setMessage(e.target.value)} required rows={4} />
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            required
+            rows={4}
+          />
         </div>
         <div style={{ marginTop: 12 }}>
-          <button type="submit" disabled={loading}>{loading ? "Creating…" : "Create Event"}</button>
+          <button type="submit" disabled={loading}>
+            {loading ? "Creating…" : "Create Event"}
+          </button>
         </div>
         {result && <div style={{ color: "green", marginTop: 8 }}>{result}</div>}
         {error && <div style={{ color: "crimson", marginTop: 8 }}>{error}</div>}

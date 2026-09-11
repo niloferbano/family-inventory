@@ -13,7 +13,7 @@ class AuthService:
 
     async def login(self, email: str, password: str):
         user = await self.user_repo.get_by_email(email)
-        if not user:
+        if not user or not user.is_active:
             raise InvalidCredentials()
 
         if not PasswordService.verify(

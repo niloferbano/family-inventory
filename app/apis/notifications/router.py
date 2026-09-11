@@ -5,7 +5,8 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, WebSocket, status
+from fastapi import (APIRouter, Depends, Query, WebSocket, WebSocketDisconnect,
+                     status)
 from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 
@@ -224,24 +225,33 @@ async def ws_inbox(websocket: WebSocket, db_manager=Depends(get_db)):
 
         async def _pump_client() -> None:
             # Optional: handle pings / future commands
-            while True:
-                text = await websocket.receive_text()
-                if text == "ping":
-                    await websocket.send_text("pong")
+            try:
+                while True:
+                    text = await websocket.receive_text()
+                    if text == "ping":
+                        await websocket.send_text("pong")
+            except WebSocketDisconnect as exc:
+                logger.debug(
+                    "WebSocket client disconnected",
+                    code=exc.code,
+                    user_id=str(user_id),
+                )
 
         redis_task = asyncio.create_task(_pump_redis())
         client_task = asyncio.create_task(_pump_client())
 
         done, pending = await asyncio.wait(
             {redis_task, client_task},
-            return_when=asyncio.FIRST_EXCEPTION,
+            return_when=asyncio.FIRST_COMPLETED,
         )
-        for t in pending:
-            t.cancel()
+        await asyncio.gather(
+            *pending,
+            return_exceptions=True,
+        )
         for t in done:
             exc = t.exception()
-            if exc:
-                raise exc
+            if isinstance(exc, WebSocketDisconnect):
+                continue
 
     finally:
         # best-effort cleanup

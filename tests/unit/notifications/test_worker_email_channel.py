@@ -86,3 +86,29 @@ async def test_send_claimed_deliveries_sends_email_channel_string():
     assert results[0].status == DeliveryStatus.SENT
     assert results[0].last_error is None
     assert sender.sent[0]["recipient"] == "family.inventory.app@gmail.com"
+
+
+@pytest.mark.asyncio
+async def test_email_includes_safe_hyperlink_and_plain_text(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from app.apis.notifications.worker import channels
+    from app.core.configs.config import settings
+
+    smtp = MagicMock()
+    monkeypatch.setattr(channels.smtplib, "SMTP", MagicMock(return_value=smtp))
+    monkeypatch.setattr(settings.SMTP, "use_ssl", False)
+    monkeypatch.setattr(settings.SMTP, "use_tls", False)
+    link = 'http://localhost:5173/activate/abc&x="value"'
+    text = "<script>unsafe</script>\n" + link
+    await channels.EmailSender().send(
+        recipient="test@example.com", subject="Activate", message=text
+    )
+    email = smtp.__enter__.return_value.send_message.call_args.args[0]
+    assert email.get_body(preferencelist=("plain",)).get_content().strip() == text
+    html = email.get_body(preferencelist=("html",)).get_content()
+    assert (
+        '<a href="http://localhost:5173/activate/abc&amp;x=&quot;value&quot;">' in html
+    )
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html

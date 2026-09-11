@@ -281,11 +281,15 @@ async def prepare_event_deliveries(
 
     # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
     ingest = NotificationIngestService(session=session)
-    await ingest.handle_inventory_event(topic=topic, payload=payload, headers=headers)
-
-    # subject/message should be owned by notifications layer
-    subject = ingest._subject(topic, payload)
-    message = ingest._message(topic, payload)
+    if topic == "users.activation.requested":
+        await ingest.handle_activation_event(topic=topic, payload=payload)
+        subject, message = payload["subject"], payload["message"]
+    else:
+        await ingest.handle_inventory_event(
+            topic=topic, payload=payload, headers=headers
+        )
+        subject = ingest._subject(topic, payload)
+        message = ingest._message(topic, payload)
 
     # ✅ Step 2: claim deliveries from DB (NOT from payload.recipients)
     claimed_rows = await claim_deliveries_to_send(

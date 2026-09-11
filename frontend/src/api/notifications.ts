@@ -10,7 +10,7 @@ export interface InAppNotification {
   created_at: string;
 }
 
-export type NotificationChannel = "email" | "sms" | "push" | "log" | "inapp";
+export type NotificationChannel = "email" | "sms" | "push" | "log" | "in_app";
 
 export interface NotificationSubscription {
   id: string;
@@ -32,12 +32,14 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function listInbox(params: {
-  homeId?: string;
-  unreadOnly?: boolean;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<InAppNotification[]> {
+export async function listInbox(
+  params: {
+    homeId?: string;
+    unreadOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<InAppNotification[]> {
   const token = getToken();
   const search = new URLSearchParams();
   if (params.homeId) {
@@ -60,7 +62,7 @@ export async function listInbox(params: {
       headers: {
         ...(token ? { Authorization: `bearer ${token}` } : {}),
       },
-    }
+    },
   );
   return handleResponse<InAppNotification[]>(res);
 }
@@ -78,13 +80,15 @@ export async function unreadCount(homeId?: string): Promise<number> {
       headers: {
         ...(token ? { Authorization: `bearer ${token}` } : {}),
       },
-    }
+    },
   );
   const data = await handleResponse<{ unread: number }>(res);
   return data.unread;
 }
 
-export async function markNotificationRead(notificationId: string): Promise<void> {
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<void> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
     method: "PATCH",
@@ -98,7 +102,9 @@ export async function markNotificationRead(notificationId: string): Promise<void
   }
 }
 
-export async function listSubscriptions(homeId?: string): Promise<NotificationSubscription[]> {
+export async function listSubscriptions(
+  homeId?: string,
+): Promise<NotificationSubscription[]> {
   const token = getToken();
   const search = new URLSearchParams();
   if (homeId) {
@@ -111,7 +117,7 @@ export async function listSubscriptions(homeId?: string): Promise<NotificationSu
       headers: {
         ...(token ? { Authorization: `bearer ${token}` } : {}),
       },
-    }
+    },
   );
   return handleResponse<NotificationSubscription[]>(res);
 }
@@ -145,32 +151,40 @@ export async function updateSubscription(
     topic?: string;
     channel?: NotificationChannel;
     enabled?: boolean;
-  }
+  },
 ): Promise<NotificationSubscription> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}/notifications/subscriptions/${subscriptionId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `bearer ${token}` } : {}),
+  const res = await fetch(
+    `${API_BASE}/notifications/subscriptions/${subscriptionId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        ...(payload.topic !== undefined ? { topic: payload.topic } : {}),
+        ...(payload.channel !== undefined ? { channel: payload.channel } : {}),
+        ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
+      }),
     },
-    body: JSON.stringify({
-      ...(payload.topic !== undefined ? { topic: payload.topic } : {}),
-      ...(payload.channel !== undefined ? { channel: payload.channel } : {}),
-      ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
-    }),
-  });
+  );
   return handleResponse<NotificationSubscription>(res);
 }
 
-export async function deleteSubscription(subscriptionId: string): Promise<void> {
+export async function deleteSubscription(
+  subscriptionId: string,
+): Promise<void> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}/notifications/subscriptions/${subscriptionId}`, {
-    method: "DELETE",
-    headers: {
-      ...(token ? { Authorization: `bearer ${token}` } : {}),
+  const res = await fetch(
+    `${API_BASE}/notifications/subscriptions/${subscriptionId}`,
+    {
+      method: "DELETE",
+      headers: {
+        ...(token ? { Authorization: `bearer ${token}` } : {}),
+      },
     },
-  });
+  );
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status}: ${text}`);

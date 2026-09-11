@@ -69,6 +69,6 @@ class TokenService:
         if not user_data:
             raise ValueError("Invalid or expired activation token")
 
-        await RedisService.delete(key)
-
+        # Keep the token until its TTL expires. The locked user activation
+        # transition prevents reuse, while failed DB transactions remain retryable.
         return user_data

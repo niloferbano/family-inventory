@@ -121,6 +121,37 @@ class NotificationIngestService:
                 event_id,
             )
 
+    async def handle_activation_event(self, *, topic: str, payload: dict) -> None:
+        event_id = UUID(payload["event_id"])
+        user = await self.user_repo.get_by_id(UUID(payload["user_id"]))
+        if user is None:
+            raise ValueError("Activation user does not exist")
+        await self.session.execute(
+            pg_insert(NotificationEvent)
+            .values(
+                id=event_id,
+                source="users",
+                event_type=topic,
+                subject=payload["subject"],
+                message=payload["message"],
+                recipients={},
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        if user.is_active:
+            return
+        await self.session.execute(
+            pg_insert(NotificationDelivery)
+            .values(
+                event_id=event_id,
+                channel=NotificationChannel.EMAIL,
+                recipient_type=NotificationRecipientType.EMAIL,
+                recipient=user.email,
+                status=DeliveryStatus.PENDING,
+            )
+            .on_conflict_do_nothing(constraint="uq_delivery_per_target")
+        )
+
     def _resolve_recipient(
         self, channel: NotificationChannel, user, target: dict | None
     ) -> tuple[NotificationRecipientType | None, str | None]:

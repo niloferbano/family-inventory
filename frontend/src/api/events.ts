@@ -20,7 +20,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function createEvent(payload: EventCreateRequest): Promise<EventCreateResponse> {
+export async function createEvent(
+  payload: EventCreateRequest,
+): Promise<EventCreateResponse> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/notifications/events`, {
     method: "POST",

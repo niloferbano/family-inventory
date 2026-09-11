@@ -37,10 +37,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     // Attempt to get error details, fallback to status text
     const errorData = await res.json().catch(() => null);
-    const message = errorData?.message || await res.text() || res.statusText;
+    const message = errorData?.message || (await res.text()) || res.statusText;
     throw new Error(`HTTP ${res.status}: ${message}`);
   }
-  
+
   // Handle empty bodies for 204 No Content
   if (res.status === 204) return {} as T;
 
@@ -50,7 +50,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 export async function listHomes(): Promise<HomeSummary[]> {
   const token = getToken();
   const headers: Record<string, string> = {
-    "Accept": "application/json",
+    Accept: "application/json",
   };
 
   if (token) {
@@ -65,7 +65,9 @@ export async function listHomes(): Promise<HomeSummary[]> {
   return handleResponse<HomeSummary[]>(res);
 }
 
-export async function createHome(payload: HomeCreateRequest): Promise<HomeRead> {
+export async function createHome(
+  payload: HomeCreateRequest,
+): Promise<HomeRead> {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -86,7 +88,7 @@ export async function createHome(payload: HomeCreateRequest): Promise<HomeRead> 
 
 export async function addHomeMember(
   homeId: string,
-  payload: { userEmail: string; userType: UserType }
+  payload: { userEmail: string; userType: UserType },
 ): Promise<HomeMemberAddResponse> {
   const token = getToken();
   const headers: Record<string, string> = {

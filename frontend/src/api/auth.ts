@@ -13,7 +13,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
   const res = await fetch(`${API_BASE}/users/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -39,7 +42,7 @@ export function getToken(): string | null {
   }
 
   const trimmed = raw.trim();
-  if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
     return trimmed.slice(1, -1);
   }
 
@@ -62,4 +65,29 @@ export function clearToken() {
   localStorage.removeItem("auth_token");
   localStorage.removeItem("token");
   localStorage.removeItem("access_token");
+}
+
+export async function register(
+  username: string,
+  email: string,
+): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE}/users/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, email }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = body.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail
+              .map((issue: { msg?: string }) => issue.msg || "Invalid field")
+              .join("; ")
+          : "Registration failed. Please try again later.";
+    throw new Error(message);
+  }
+  return body;
 }
