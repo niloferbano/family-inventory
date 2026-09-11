@@ -6,16 +6,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.apis.notifications.models import (
-    NotificationDelivery,
-    NotificationEvent,
-    NotificationOutbox,
-)
-from app.apis.notifications.types import (
-    DeliveryStatus,
-    NotificationChannel,
-    NotificationRecipientType,
-)
+from app.apis.notifications.models import (NotificationDelivery,
+                                           NotificationEvent,
+                                           NotificationOutbox)
+from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
+                                          NotificationRecipientType)
 from app.apis.notifications.worker import sweeper
 
 
