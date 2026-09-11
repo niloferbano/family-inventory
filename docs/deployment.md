@@ -223,3 +223,28 @@ This backup covers PostgreSQL only. RabbitMQ queues, Redis state, and Caddy
 certificates live in separate volumes. Restoring an older database does not rewind
 queued messages or cached state; reconcile those with the restored database before
 restarting workers to avoid replaying notifications unintentionally.
+
+## Registration activation email
+
+Registration now creates an inactive account and a `users.activation.requested`
+outbox event in one database transaction. The worker's outbox dispatcher publishes
+it to RabbitMQ (normally within its 30-second sweep interval), then the notification
+consumer creates an email delivery and uses `EmailSender`. Failed deliveries use
+the existing retry mechanism. No activation key is returned by registration.
+
+Set `PUBLIC_BASE_URL=https://inventory.niloferbano.com` in the VPS `.env`; use
+`http://localhost` locally. `.env.docker` must contain
+`PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost}`. The email points to
+`/activate/key=...`, where the user chooses a password. The account remains inactive
+until activation succeeds. Rebuild both images and recreate the API and worker to
+apply these changes; existing running images do not contain them.
+
+For Gmail, configure `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`,
+`SMTP_USE_TLS=true`, `SMTP_USE_SSL=false`, the sender account as `SMTP_USERNAME`,
+and its SMTP/app-password credential as `SMTP_PASSWORD`. Do not commit credentials.
+If overriding `NOTIFICATION_BINDINGS`, retain both `inventory.item.*` and
+`users.activation.requested`. Registration email does not require a home subscription.
+
+Activation links expire after `ACTIVATION_TOKEN_EXPIRE_MINUTES` (default 30).
+A resend-activation endpoint is not yet implemented; duplicate registration of an
+inactive account returns a conflict, so an expired link currently requires support.

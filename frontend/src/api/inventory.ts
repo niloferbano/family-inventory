@@ -47,7 +47,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function listInventoryItems(homeId: string): Promise<PaginatedInventoryResponse> {
+export async function listInventoryItems(
+  homeId: string,
+): Promise<PaginatedInventoryResponse> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/inventory/${homeId}`, {
     method: "GET",
@@ -60,7 +62,7 @@ export async function listInventoryItems(homeId: string): Promise<PaginatedInven
 
 export async function createInventoryItem(
   homeId: string,
-  payload: InventoryCreateRequest
+  payload: InventoryCreateRequest,
 ): Promise<InventoryItem[]> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/inventory/${homeId}`, {
@@ -77,7 +79,7 @@ export async function createInventoryItem(
 export async function updateInventoryItem(
   homeId: string,
   itemId: string,
-  payload: InventoryUpdateRequest
+  payload: InventoryUpdateRequest,
 ): Promise<InventoryItem> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/inventory/${homeId}/${itemId}`, {
@@ -91,7 +93,10 @@ export async function updateInventoryItem(
   return handleResponse<InventoryItem>(res);
 }
 
-export async function deleteInventoryItem(homeId: string, itemId: string): Promise<void> {
+export async function deleteInventoryItem(
+  homeId: string,
+  itemId: string,
+): Promise<void> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/inventory/${homeId}/${itemId}`, {
     method: "DELETE",

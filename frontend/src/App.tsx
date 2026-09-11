@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import Register from "./components/Register";
+import ActivateAccount from "./components/ActivateAccount";
 import Login from "./components/Login";
 import InventoryHome from "./components/InventoryHome";
 import { getToken, clearToken } from "./api/auth";
@@ -45,7 +47,24 @@ export default function App() {
       >
         <h2 style={{ margin: 0 }}>Family Inventory</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {authed && <NotificationBell />}
+          {authed && (
+            <NotificationBell
+              onSelectItem={(notification) => {
+                console.log("Global Notification Clicked:", notification);
+                if (notification.home_id) {
+                  // Extract potential item name from subject (e.g. "Expired: oilve oil" -> "oilve oil")
+                  const itemName = notification.subject?.includes(":")
+                    ? notification.subject.split(":")[1].trim()
+                    : "";
+
+                  // Navigate with both home and item query params
+                  navigate(
+                    `/?home=${notification.home_id}&highlight=${encodeURIComponent(itemName)}`,
+                  );
+                }
+              }}
+            />
+          )}
           {authed && (
             <Link to="/subscriptions" style={navActionStyle}>
               Subscriptions
@@ -55,6 +74,11 @@ export default function App() {
             <button type="button" onClick={onLogout} style={navActionStyle}>
               Logout
             </button>
+          )}
+          {!authed && (
+            <Link to="/register" style={navActionStyle}>
+              Register
+            </Link>
           )}
           {!authed && (
             <Link to="/login" style={navActionStyle}>
@@ -67,20 +91,40 @@ export default function App() {
       <main>
         <Routes>
           <Route
+            path="/register"
+            element={authed ? <Navigate to="/" replace /> : <Register />}
+          />
+          <Route path="/activate/:key" element={<ActivateAccount />} />
+          <Route
             path="/login"
-            element={authed ? <Navigate to="/" replace /> : <Login onLogin={onLogin} />}
+            element={
+              authed ? <Navigate to="/" replace /> : <Login onLogin={onLogin} />
+            }
           />
           <Route
             path="/"
-            element={authed ? <InventoryHome onLogout={onLogout} /> : <Navigate to="/login" replace />}
+            element={
+              authed ? (
+                <InventoryHome onLogout={onLogout} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
           <Route
             path="/subscriptions"
             element={
-              authed ? <NotificationSubscriptions onLogout={onLogout} /> : <Navigate to="/login" replace />
+              authed ? (
+                <NotificationSubscriptions onLogout={onLogout} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
             }
           />
-          <Route path="*" element={<Navigate to={authed ? "/" : "/login"} replace />} />
+          <Route
+            path="*"
+            element={<Navigate to={authed ? "/" : "/login"} replace />}
+          />
         </Routes>
       </main>
     </div>

@@ -31,6 +31,8 @@ async def register_user(
         user_service = UserService(session)
         try:
             return await user_service.register_user(user_data=user_input)
+        except UserNameAlreadyExists:
+            raise HTTPException(status_code=409, detail="User name already exists")
         except UserAlreadyExists:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str("User already exists.")
@@ -57,6 +59,12 @@ async def activate_user(
             )
 
             return {"message": "User activated successfully"}
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail="Invalid or expired activation link"
+            )
+        except UserAlreadyExists:
+            raise HTTPException(status_code=409, detail="User already exists.")
         except UserNameAlreadyExists:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="User name already exists"

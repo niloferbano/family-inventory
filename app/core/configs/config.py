@@ -1,3 +1,4 @@
+from pydantic import HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.configs.cache_config import CacheConfiguration
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     SMTP: SMTPSettings = SMTPSettings()
+    PUBLIC_BASE_URL: HttpUrl = HttpUrl("http://localhost")
 
     # JWT
     JWT_SECRET_KEY: str = "notset"
@@ -43,7 +45,7 @@ class Settings(BaseSettings):
     NOTIFICATION_DLQ_ROUTING_KEY: str = "dlq"
 
     # consume bindings (comma-separated)
-    NOTIFICATION_BINDINGS: str = "inventory.item.*"
+    NOTIFICATION_BINDINGS: str = "inventory.item.*,users.activation.requested"
 
     # broker-managed retry infra
     BROKER_MANAGED_RETRIES: bool = False

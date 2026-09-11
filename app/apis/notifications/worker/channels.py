@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import re
 import smtplib
 import ssl
 from dataclasses import dataclass
@@ -204,7 +206,22 @@ class EmailSender:
         msg["Subject"] = subject or ""
         msg["From"] = settings.SMTP.from_email
         msg["To"] = recipient
-        msg.set_content(message or "")
+        plain = message or ""
+        msg.set_content(plain)
+        # Escape text and attributes; only HTTP(S) URLs become clickable links.
+        parts = re.split(r"(https?://[^\s<>]+)", plain)
+        rendered = "".join(
+            (
+                f'<a href="{html.escape(part, quote=True)}">{html.escape(part)}</a>'
+                if index % 2
+                else html.escape(part)
+            )
+            for index, part in enumerate(parts)
+        )
+        msg.add_alternative(
+            "<html><body><p>" + rendered.replace("\n", "<br>\n") + "</p></body></html>",
+            subtype="html",
+        )
 
         context = ssl.create_default_context()
         if settings.SMTP.use_ssl:

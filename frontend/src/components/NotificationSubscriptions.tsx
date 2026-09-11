@@ -12,7 +12,7 @@ import {
 } from "../api/notifications";
 
 const CHANNEL_OPTIONS: Array<{ value: NotificationChannel; label: string }> = [
-  { value: "inapp", label: "In-app" },
+  { value: "in_app", label: "In-app" },
   { value: "email", label: "Email" },
   { value: "sms", label: "SMS" },
   { value: "push", label: "Push" },
@@ -62,7 +62,9 @@ const topicKeyFor = (topic: string): InventoryTopicKey | null => {
 
 const isUnauthorized = (err: unknown) => {
   const message = String(err ?? "");
-  return message.includes("401") || message.toLowerCase().includes("unauthorized");
+  return (
+    message.includes("401") || message.toLowerCase().includes("unauthorized")
+  );
 };
 
 export default function NotificationSubscriptions({
@@ -72,7 +74,9 @@ export default function NotificationSubscriptions({
 }) {
   const [homes, setHomes] = useState<HomeSummary[]>([]);
   const [loadingHomes, setLoadingHomes] = useState(true);
-  const [subscriptions, setSubscriptions] = useState<NotificationSubscription[]>([]);
+  const [subscriptions, setSubscriptions] = useState<
+    NotificationSubscription[]
+  >([]);
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(true);
   const [filterHomeId, setFilterHomeId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +84,7 @@ export default function NotificationSubscriptions({
   const [form, setForm] = useState({
     homeId: "",
     topicKey: DEFAULT_TOPIC_KEY,
-    channel: "inapp" as NotificationChannel,
+    channel: "in_app" as NotificationChannel,
     enabled: true,
   });
   const [creating, setCreating] = useState(false);
@@ -90,7 +94,7 @@ export default function NotificationSubscriptions({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({
     topicKey: DEFAULT_TOPIC_KEY,
-    channel: "inapp" as NotificationChannel,
+    channel: "in_app" as NotificationChannel,
     enabled: true,
   });
   const [editingUnsupported, setEditingUnsupported] = useState(false);
@@ -141,7 +145,7 @@ export default function NotificationSubscriptions({
         setLoadingSubscriptions(false);
       }
     },
-    [handleLogout]
+    [handleLogout],
   );
 
   useEffect(() => {
@@ -175,7 +179,7 @@ export default function NotificationSubscriptions({
       setForm((prev) => ({
         ...prev,
         topicKey: DEFAULT_TOPIC_KEY,
-        channel: "inapp",
+        channel: "in_app",
         enabled: true,
       }));
       setFormSuccess("Subscription added.");
@@ -212,7 +216,9 @@ export default function NotificationSubscriptions({
       return;
     }
     if (editingUnsupported) {
-      setError("This subscription type can't be edited here. Delete and recreate it.");
+      setError(
+        "This subscription type can't be edited here. Delete and recreate it.",
+      );
       return;
     }
     setSavingId(editingId);
@@ -300,10 +306,14 @@ export default function NotificationSubscriptions({
             Home
             <select
               value={form.homeId}
-              onChange={(e) => setForm((prev) => ({ ...prev, homeId: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, homeId: e.target.value }))
+              }
               disabled={loadingHomes || homes.length === 0}
             >
-              {homes.length === 0 && <option value="">No homes available</option>}
+              {homes.length === 0 && (
+                <option value="">No homes available</option>
+              )}
               {homes.map((home) => (
                 <option key={home.home_id} value={home.home_id}>
                   {home.name}
@@ -354,7 +364,9 @@ export default function NotificationSubscriptions({
               <input
                 type="checkbox"
                 checked={form.enabled}
-                onChange={(e) => setForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, enabled: e.target.checked }))
+                }
               />
               Enabled
             </label>
@@ -365,7 +377,9 @@ export default function NotificationSubscriptions({
               {creating ? "Saving..." : "Add subscription"}
             </button>
             {formError && <span style={{ color: "crimson" }}>{formError}</span>}
-            {formSuccess && <span style={{ color: "green" }}>{formSuccess}</span>}
+            {formSuccess && (
+              <span style={{ color: "green" }}>{formSuccess}</span>
+            )}
           </div>
         </form>
       </div>
@@ -381,7 +395,14 @@ export default function NotificationSubscriptions({
           }}
         >
           <h4 style={{ margin: 0 }}>Your subscriptions</h4>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
               Home
               <select
@@ -407,7 +428,9 @@ export default function NotificationSubscriptions({
           </div>
         </div>
 
-        {error && <div style={{ color: "crimson", marginTop: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ color: "crimson", marginTop: 12 }}>{error}</div>
+        )}
 
         {loadingSubscriptions ? (
           <div style={{ marginTop: 12 }}>Loading subscriptions...</div>
@@ -443,7 +466,9 @@ export default function NotificationSubscriptions({
                   >
                     <div>
                       <div style={{ fontWeight: 600 }}>{topicLabel}</div>
-                      <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
+                      <div
+                        style={{ fontSize: 12, color: "#555", marginTop: 4 }}
+                      >
                         Home: {homeName} · Channel: {sub.channel} ·{" "}
                         {sub.enabled ? "Enabled" : "Disabled"}
                         {!isSupportedTopic && " · Unsupported type"}
@@ -453,8 +478,15 @@ export default function NotificationSubscriptions({
                       <button
                         type="button"
                         onClick={() => startEdit(sub)}
-                        disabled={!isSupportedTopic || (Boolean(editingId) && !isEditing)}
-                        title={!isSupportedTopic ? "Unsupported notification type" : undefined}
+                        disabled={
+                          !isSupportedTopic ||
+                          (Boolean(editingId) && !isEditing)
+                        }
+                        title={
+                          !isSupportedTopic
+                            ? "Unsupported notification type"
+                            : undefined
+                        }
                       >
                         Edit
                       </button>
@@ -489,7 +521,9 @@ export default function NotificationSubscriptions({
                           ))}
                         </select>
                       </label>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                      <div
+                        style={{ display: "flex", flexWrap: "wrap", gap: 12 }}
+                      >
                         <label style={{ display: "grid", gap: 6 }}>
                           Channel
                           <select
@@ -508,7 +542,13 @@ export default function NotificationSubscriptions({
                             ))}
                           </select>
                         </label>
-                        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
                           <input
                             type="checkbox"
                             checked={editValues.enabled}
@@ -524,7 +564,8 @@ export default function NotificationSubscriptions({
                       </div>
                       {editingUnsupported && (
                         <div style={{ color: "#555" }}>
-                          This subscription uses a custom alert type. Delete and recreate it.
+                          This subscription uses a custom alert type. Delete and
+                          recreate it.
                         </div>
                       )}
                       <div style={{ display: "flex", gap: 8 }}>
@@ -535,7 +576,11 @@ export default function NotificationSubscriptions({
                         >
                           {savingId === sub.id ? "Saving..." : "Save"}
                         </button>
-                        <button type="button" onClick={cancelEdit} disabled={savingId === sub.id}>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          disabled={savingId === sub.id}
+                        >
                           Cancel
                         </button>
                       </div>
