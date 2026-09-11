@@ -210,7 +210,11 @@ frontend/dist/
 .vscode
 .env.*
 !.env.*.example
+!.env.example
 
 # Generated local test reports and macOS metadata
 /test-results/
 .DS_Store
+
+# Local database backups
+/backups/
