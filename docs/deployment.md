@@ -235,7 +235,7 @@ the existing retry mechanism. No activation key is returned by registration.
 Set `PUBLIC_BASE_URL=https://inventory.niloferbano.com` in the VPS `.env`; use
 `http://localhost` locally. `.env.docker` must contain
 `PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost}`. The email points to
-`/activate?key=...`, where the user chooses a password. The account remains inactive
+`/activate/key=...`, where the user chooses a password. The account remains inactive
 until activation succeeds. Rebuild both images and recreate the API and worker to
 apply these changes; existing running images do not contain them.
 

@@ -28,7 +28,7 @@ Acceptance: a new user can complete account creation through the browser without
 CLI or database access.
 
 Backend update: registration now queues activation email and returns a status
-message, not the key. `/activate?key=...` is implemented; a registration page and
+message, not the key. `/activate/{key}` is implemented; a registration page and
 resend flow remain outstanding. SMTP and the notification worker must be configured.
 
 ## Epic 2 — Current-user and session integration (P1)

@@ -51,7 +51,7 @@ async def test_register_user_queues_activation_email(client, db_session, monkeyp
     )
     assert outbox.status == "PENDING"
     assert outbox.topic == "users.activation.requested"
-    assert "/activate?key=" + "a" * 32 in outbox.payload["message"]
+    assert "/activate/" + "a" * 32 in outbox.payload["message"]
     batch = await prepare_event_deliveries(
         db_session,
         topic=outbox.topic,
@@ -277,7 +277,7 @@ async def test_activation_outbox_through_consumer_and_email_sender(
     email = server.send_message.call_args.args[0]
     assert email["To"] == "queued@example.com"
     assert (
-        "/activate?key=" + "b" * 32
+        "/activate/" + "b" * 32
         in email.get_body(preferencelist=("plain",)).get_content()
     )
     async with mock_db.begin() as session:

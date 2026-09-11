@@ -19,6 +19,7 @@ jobs:
           POSTGRES_USER: family_test
           POSTGRES_PASSWORD: family_pass
           POSTGRES_DB: family_test
+          REQUIRE_TEST_DATABASE: "true"
         options: >-
           --health-cmd "pg_isready -U family_test -d family_test"
           --health-interval 10s
