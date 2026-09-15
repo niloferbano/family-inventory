@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.notifications.models import (NotificationDelivery,
                                            NotificationEvent)
+from app.apis.notifications.repository import NotificationEventRepository
 from app.apis.notifications.services.ingest import NotificationIngestService
 from app.apis.notifications.services.realtime import \
     NotificationRealtimeService
@@ -134,7 +135,8 @@ async def ensure_event_exists(
     payload: dict[str, Any],
     headers: dict[str, Any],
 ) -> NotificationEvent:
-    existing_event = await session.get(NotificationEvent, event_id)
+    event_repo = NotificationEventRepository(session)
+    existing_event = await event_repo.get(event_id)
     if existing_event:
         return existing_event
 
@@ -146,9 +148,7 @@ async def ensure_event_exists(
         message=_message_for(topic, payload),
         recipients={"recipients": payload.get("recipients", [])},  # optional snapshot
     )
-    session.add(event)
-    await session.flush()
-    return event
+    return await event_repo.create(event)
 
 
 async def bulk_upsert_deliveries(
@@ -281,8 +281,8 @@ async def prepare_event_deliveries(
 
     # ✅ Step 1: ingest event -> creates NotificationEvent + NotificationDelivery rows
     ingest = NotificationIngestService(session=session)
-    if topic == "users.activation.requested":
-        await ingest.handle_activation_event(topic=topic, payload=payload)
+    if topic in ("users.activation.requested", "users.password_reset.requested"):
+        await ingest.handle_account_email_event(topic=topic, payload=payload)
         subject, message = payload["subject"], payload["message"]
     else:
         await ingest.handle_inventory_event(

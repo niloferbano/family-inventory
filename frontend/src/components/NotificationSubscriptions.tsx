@@ -285,9 +285,6 @@ export default function NotificationSubscriptions({
           <Link to="/" style={{ textDecoration: "none" }}>
             Home
           </Link>
-          <button type="button" onClick={handleLogout}>
-            Logout
-          </button>
         </div>
       </div>
 

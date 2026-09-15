@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Register from "./components/Register";
 import ActivateAccount from "./components/ActivateAccount";
+import PasswordReset from "./components/PasswordReset";
 import Login from "./components/Login";
 import InventoryHome from "./components/InventoryHome";
 import { getToken, clearToken } from "./api/auth";
@@ -94,6 +95,8 @@ export default function App() {
             path="/register"
             element={authed ? <Navigate to="/" replace /> : <Register />}
           />
+          <Route path="/forgot-password" element={<PasswordReset key="request" />} />
+          <Route path="/reset-password/:token" element={<PasswordReset key="confirm" confirm />} />
           <Route path="/activate/:key" element={<ActivateAccount />} />
           <Route
             path="/login"

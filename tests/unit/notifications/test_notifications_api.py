@@ -187,3 +187,49 @@ async def test_subscription_duplicate_returns_conflict(client, auth_headers):
     assert second.status_code == 409
     body = second.json()
     assert body["error"] == "SUBSCRIPTION_DUPLICATE"
+
+
+@pytest.mark.asyncio
+async def test_cannot_create_subscription_for_other_home(
+    client, auth_headers, db_session
+):
+    home = Home(name="Someone else's home")
+    db_session.add(home)
+    await db_session.commit()
+    response = await client.post(
+        "/notifications/subscriptions",
+        headers=auth_headers,
+        json={"home_id": str(home.id), "topic": "inventory.item.*", "channel": "email"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_cannot_modify_or_list_another_users_subscription(
+    client, auth_headers, db_session
+):
+    from app.apis.notifications.models import NotificationSubscription
+
+    home = Home(name="Other home")
+    user = User(username="other", email="other@example.com", hashed_password="unused")
+    db_session.add_all([home, user])
+    await db_session.flush()
+    subscription = NotificationSubscription(
+        home_id=home.id,
+        user_id=user.id,
+        topic="inventory.item.*",
+        channel="email",
+        enabled=True,
+    )
+    db_session.add(subscription)
+    await db_session.commit()
+    url = f"/notifications/subscriptions/{subscription.id}"
+    response = await client.patch(url, headers=auth_headers, json={"enabled": False})
+    assert response.status_code == 403
+    response = await client.delete(url, headers=auth_headers)
+    assert response.status_code == 403
+    response = await client.get("/notifications/subscriptions", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == []
+    await db_session.refresh(subscription)
+    assert subscription.enabled is True

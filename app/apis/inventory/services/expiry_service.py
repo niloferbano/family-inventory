@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.inventory.events import InventoryEventFactory
@@ -15,7 +13,7 @@ from app.apis.inventory.models import InventoryItem
 from app.apis.inventory.repository import InventoryRepository
 from app.apis.inventory.types import InventoryAlertType
 from app.apis.notifications.brokers import EventBroker, EventEnvelope
-from app.apis.notifications.models import NotificationOutbox
+from app.apis.notifications.repository import NotificationOutboxRepository
 from app.core.database.base import NotificationEventId
 
 logger = logging.getLogger(__name__)
@@ -195,35 +193,8 @@ class InventoryExpiryService:
             headers=headers,
         )
 
-        tbl = NotificationOutbox.__table__
-        logger.info(
-            "Ensuring outbox row exists for event_id=%s topic=%s", event_id, topic
-        )
-
-        insert_stmt = (
-            pg_insert(NotificationOutbox)
-            .values(outbox_row)
-            .on_conflict_do_nothing(index_elements=[tbl.c.event_id])
-            .returning(tbl.c.id, tbl.c.status, tbl.c.attempt_count)
-        )
-
-        inserted = (await self.session.execute(insert_stmt)).one_or_none()
-        if inserted is not None:
-            outbox_id, status, attempt_count = inserted
-        else:
-            existing = (
-                await self.session.execute(
-                    sa.select(tbl.c.id, tbl.c.status, tbl.c.attempt_count)
-                    .where(tbl.c.event_id == event_id)
-                    .limit(1)
-                )
-            ).one_or_none()
-            if existing is None:
-                # Extremely unlikely (race + rollback). Treat as a retryable error.
-                raise RuntimeError(
-                    f"Outbox row missing after insert/select for event_id={event_id}"
-                )
-            outbox_id, status, attempt_count = existing
+        outbox_repo = NotificationOutboxRepository(self.session)
+        outbox_id, status, attempt_count = await outbox_repo.ensure(outbox_row)
 
         # Normalize status in case older rows were written in a different case.
         status_norm = (status or "").upper()
@@ -249,38 +220,13 @@ class InventoryExpiryService:
 
         # 2) Claim this outbox row for an immediate publish attempt.
         # This prevents concurrent publishers for the same event.
-        claim_stmt = (
-            sa.update(NotificationOutbox)
-            .where(NotificationOutbox.id == outbox_id)
-            .where(sa.func.upper(NotificationOutbox.status).in_(["PENDING", "FAILED"]))
-            .where(
-                sa.or_(
-                    NotificationOutbox.next_retry_at.is_(None),
-                    NotificationOutbox.next_retry_at <= now,
-                )
-            )
-            .where(NotificationOutbox.attempt_count < max_attempts)
-            .values(
-                status="SENDING",
-                attempt_count=NotificationOutbox.attempt_count + 1,
-                updated_at=now,
-            )
-            .returning(NotificationOutbox.attempt_count)
+        claimed_attempt = await outbox_repo.claim_one(
+            outbox_id, now=now, max_attempts=max_attempts
         )
-
-        claimed_attempt = (await self.session.execute(claim_stmt)).scalar_one_or_none()
         if claimed_attempt is None:
             # Another worker claimed it or it is not eligible right now.
             # Log current row state to make debugging easier.
-            row = (
-                await self.session.execute(
-                    sa.select(
-                        NotificationOutbox.status,
-                        NotificationOutbox.attempt_count,
-                        NotificationOutbox.next_retry_at,
-                    ).where(NotificationOutbox.id == outbox_id)
-                )
-            ).one_or_none()
+            row = await outbox_repo.get_state(outbox_id)
             if row is not None:
                 cur_status, cur_attempts, cur_next_retry = row
                 logger.info(
@@ -321,26 +267,20 @@ class InventoryExpiryService:
                 topic,
                 exc,
             )
-            await self.session.execute(
-                sa.update(NotificationOutbox)
-                .where(NotificationOutbox.id == outbox_id)
-                .values(
-                    status="FAILED",
-                    last_error=f"{type(exc).__name__}: {exc}",
-                    next_retry_at=now + timedelta(seconds=60),
-                    updated_at=now,
-                )
+            await outbox_repo.update(
+                outbox_id,
+                status="FAILED",
+                last_error=f"{type(exc).__name__}: {exc}",
+                next_retry_at=now + timedelta(seconds=60),
+                updated_at=now,
             )
             return
 
         # 4) Mark SENT
-        await self.session.execute(
-            sa.update(NotificationOutbox)
-            .where(NotificationOutbox.id == outbox_id)
-            .values(
-                status="SENT",
-                last_error=None,
-                next_retry_at=None,
-                updated_at=now,
-            )
+        await outbox_repo.update(
+            outbox_id,
+            status="SENT",
+            last_error=None,
+            next_retry_at=None,
+            updated_at=now,
         )

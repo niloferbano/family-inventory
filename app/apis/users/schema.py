@@ -80,3 +80,17 @@ class TokenResponse(BaseApiSchema):
 
 class UserRegisterResponse(BaseApiSchema):
     message: str = "Registration received. Your activation email has been queued."
+
+
+class PasswordResetRequest(BaseApiSchema):
+    email: EmailStr
+
+
+class PasswordResetConfirm(UserActivationRequest):
+    token: SecretStr = Field(min_length=1, max_length=256)
+
+    @field_validator("password")
+    def password_length(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value().encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes")
+        return value

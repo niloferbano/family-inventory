@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.apis.notifications.models import NotificationOutbox
+from app.apis.notifications.repository import NotificationOutboxRepository
 from app.apis.users.exceptions import UserAlreadyExists, UserNameAlreadyExists
 from app.apis.users.models import User as UserModel
 from app.apis.users.repository import UserRepository
@@ -68,7 +69,7 @@ class UserService:
         token = await TokenService.create_activation_token(user_data=user_data)
         event_id = uuid4()
         link = f"{str(settings.PUBLIC_BASE_URL).rstrip('/')}/activate/{quote(str(token), safe='')}"
-        self.session.add(
+        NotificationOutboxRepository(self.session).add(
             NotificationOutbox(
                 event_id=event_id,
                 topic="users.activation.requested",

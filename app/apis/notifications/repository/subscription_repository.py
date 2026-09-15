@@ -1,4 +1,3 @@
-# app/apis/notifications/repository.py
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession

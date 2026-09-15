@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "notset"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     ACTIVATION_TOKEN_EXPIRE_MINUTES: int = 30
     HOST: str = "127.0.0.1"
     PORT: int = 8000
@@ -45,7 +46,9 @@ class Settings(BaseSettings):
     NOTIFICATION_DLQ_ROUTING_KEY: str = "dlq"
 
     # consume bindings (comma-separated)
-    NOTIFICATION_BINDINGS: str = "inventory.item.*,users.activation.requested"
+    NOTIFICATION_BINDINGS: str = (
+        "inventory.item.*,users.activation.requested,users.password_reset.requested"
+    )
 
     # broker-managed retry infra
     BROKER_MANAGED_RETRIES: bool = False

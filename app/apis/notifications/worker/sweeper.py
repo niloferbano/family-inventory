@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.brokers import EventBroker, EventEnvelope
 from app.apis.notifications.models import (NotificationDelivery,
-                                           NotificationEvent,
                                            NotificationOutbox)
+from app.apis.notifications.repository import (NotificationEventRepository,
+                                               NotificationOutboxRepository)
 from app.apis.notifications.types import DeliveryStatus, NotificationChannel
 from app.apis.notifications.worker.channels import ChannelSender
 from app.apis.notifications.worker.handlers import (
@@ -42,36 +43,9 @@ async def _claim_outbox_rows_for_send(
     limit: int,
     max_attempts: int,
 ) -> list[NotificationOutbox]:
-    claimable = (
-        sa.select(NotificationOutbox.id)
-        .where(NotificationOutbox.attempt_count < max_attempts)
-        .where(NotificationOutbox.status.in_(["PENDING", "FAILED"]))
-        .where(
-            sa.or_(
-                NotificationOutbox.next_retry_at.is_(None),
-                NotificationOutbox.next_retry_at <= now,
-            )
-        )
-        .order_by(NotificationOutbox.created_at.asc(), NotificationOutbox.id.asc())
-        .limit(limit)
-        .with_for_update(skip_locked=True)
-        .subquery()
+    return await NotificationOutboxRepository(session).claim_for_send(
+        now=now, limit=limit, max_attempts=max_attempts
     )
-
-    # Mark as SENDING + bump attempt_count while holding the row locks
-    stmt = (
-        sa.update(NotificationOutbox)
-        .where(NotificationOutbox.id.in_(sa.select(claimable.c.id)))
-        .values(
-            status="SENDING",
-            attempt_count=NotificationOutbox.attempt_count + 1,
-            updated_at=now,
-        )
-        .returning(NotificationOutbox)
-    )
-
-    res = await session.execute(stmt)
-    return list(res.scalars().all())
 
 
 async def _fetch_retry_event_ids(
@@ -176,35 +150,10 @@ async def sweep_outbox_once(
             }
 
     # 3) Finalize all rows in ONE bulk UPDATE
-    ids = list(results.keys())
-
-    status_case = sa.case(
-        {rid: results[rid]["status"] for rid in ids},
-        value=NotificationOutbox.id,
-        else_=NotificationOutbox.status,
-    )
-    last_error_case = sa.case(
-        {rid: results[rid]["last_error"] for rid in ids},
-        value=NotificationOutbox.id,
-        else_=NotificationOutbox.last_error,
-    )
-    next_retry_case = sa.case(
-        {rid: results[rid]["next_retry_at"] for rid in ids},
-        value=NotificationOutbox.id,
-        else_=NotificationOutbox.next_retry_at,
-    )
-
     async with session_scope(sessionmaker) as session:
         async with session.begin():
-            await session.execute(
-                sa.update(NotificationOutbox)
-                .where(NotificationOutbox.id.in_(ids))
-                .values(
-                    status=status_case,
-                    last_error=last_error_case,
-                    next_retry_at=next_retry_case,
-                    updated_at=_utcnow(),
-                )
+            await NotificationOutboxRepository(session).finalize_results(
+                results, now=_utcnow()
             )
 
     return published
@@ -235,7 +184,7 @@ async def sweep_once(
         # Load event + claim rows in one txn, AND copy subject/message safely
         async with session_scope(sessionmaker) as session:
             async with session.begin():
-                event = await session.get(NotificationEvent, event_id)
+                event = await NotificationEventRepository(session).get(event_id)
                 if not event:
                     logger.warning("Sweeper missing event_id=%s", event_id)
                     continue

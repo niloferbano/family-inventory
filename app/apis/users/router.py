@@ -1,18 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.apis.users.auth_service import AuthService
-from app.apis.users.exceptions import (InvalidCredentials, UserAlreadyExists,
+from app.apis.users.exceptions import (InvalidCredentials, InvalidResetToken,
+                                       UserAlreadyExists,
                                        UserNameAlreadyExists)
 from app.apis.users.schema import (PaginatedUsersResponse,
+                                   PasswordResetConfirm, PasswordResetRequest,
                                    UserActivationRequest, UserBase,
                                    UserRegisterResponse)
 from app.apis.users.user_service import UserService
 from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import DBManager, get_db
+from app.core.logging import get_logger
 from app.iam.dependencies import get_current_user
 from app.iam.permissions import PermissionsValidator
 from app.iam.schema import TokenResponse
 from app.iam.types import ActivationKey
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -124,3 +129,31 @@ async def get_all_users(
             pagination=pagination,
             request_url=str(request.url),
         )
+
+
+@router.post("/password-reset/request")
+async def request_password_reset(
+    payload: PasswordResetRequest, db_manager=Depends(get_db)
+):
+    async with db_manager.begin() as session:
+        await AuthService(session).request_password_reset(str(payload.email))
+    return {
+        "message": "If an eligible account exists, a password reset email will be sent."
+    }
+
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset(
+    payload: PasswordResetConfirm, db_manager=Depends(get_db)
+):
+    try:
+        async with db_manager.begin() as session:
+            await AuthService(session).reset_password(
+                payload.token.get_secret_value(), payload.password.get_secret_value()
+            )
+    except InvalidResetToken:
+        raise HTTPException(
+            status_code=400, detail="Invalid or expired password reset token"
+        )
+    logger.info("password_reset_completed")
+    return {"message": "Password reset successfully. Log in with your new password."}

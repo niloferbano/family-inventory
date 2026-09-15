@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.notifications.models import (NotificationDelivery,
                                            NotificationEvent)
-from app.apis.notifications.repository import \
-    NotificationSubscriptionRepository
+from app.apis.notifications.repository import (
+    NotificationEventRepository, NotificationSubscriptionRepository)
 from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
                                           NotificationRecipientType,
                                           NotificationSource)
@@ -27,6 +27,7 @@ class NotificationIngestService:
         session: AsyncSession,
     ):
         self.session = session
+        self.event_repo = NotificationEventRepository(session)
         self.sub_repo = NotificationSubscriptionRepository(session)
         self.user_repo = UserRepository(session)
 
@@ -55,15 +56,14 @@ class NotificationIngestService:
         # NOTE: do NOT open session.begin() here if caller already did session.begin()
         try:
             async with self.session.begin_nested():
-                self.session.add(event)
-                await self.session.flush()
+                await self.event_repo.create(event)
             logger.info("INGEST event insert OK event_id=%s", event_id)
 
         except IntegrityError:
             logger.info(
                 "INGEST event already exists event_id=%s (idempotent)", event_id
             )
-            existing = await self.session.get(NotificationEvent, event_id)
+            existing = await self.event_repo.get(event_id)
             if existing is None:
                 raise
             event = existing
@@ -121,24 +121,22 @@ class NotificationIngestService:
                 event_id,
             )
 
-    async def handle_activation_event(self, *, topic: str, payload: dict) -> None:
+    async def handle_account_email_event(self, *, topic: str, payload: dict) -> None:
         event_id = UUID(payload["event_id"])
         user = await self.user_repo.get_by_id(UUID(payload["user_id"]))
         if user is None:
-            raise ValueError("Activation user does not exist")
-        await self.session.execute(
-            pg_insert(NotificationEvent)
-            .values(
-                id=event_id,
-                source="users",
-                event_type=topic,
-                subject=payload["subject"],
-                message=payload["message"],
-                recipients={},
-            )
-            .on_conflict_do_nothing(index_elements=["id"])
+            raise ValueError("Account email user does not exist")
+        await self.event_repo.create_if_missing(
+            event_id=event_id,
+            source="users",
+            event_type=topic,
+            subject=payload["subject"],
+            message=payload["message"],
+            recipients={},
         )
-        if user.is_active:
+        if topic == "users.activation.requested" and user.is_active:
+            return
+        if topic == "users.password_reset.requested" and not user.is_active:
             return
         await self.session.execute(
             pg_insert(NotificationDelivery)

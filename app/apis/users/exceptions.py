@@ -8,3 +8,7 @@ class UserAlreadyExists(Exception):
 
 class UserNameAlreadyExists(Exception):
     pass
+
+
+class InvalidResetToken(Exception):
+    pass
