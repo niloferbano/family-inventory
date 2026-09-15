@@ -43,3 +43,8 @@ services:
     healthcheck:
       disable: true
     command: [sh, -c, 'while true; do python -m app.jobs.inventory_expiry_job; sleep "$${EXPIRY_INTERVAL_SECONDS}"; done']
+  user-cleanup:
+    <<: *app
+    healthcheck:
+      disable: true
+    command: [python, -m, app.jobs.user_cleanup_job, --loop]

@@ -23,6 +23,8 @@ services:
       timeout: 3s
       retries: 30
   test:
+    environment:
+      TEST_REDIS_URL: redis://redis-test:6379/0
     build:
       context: ..
       dockerfile: deploy/Dockerfile

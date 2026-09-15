@@ -29,6 +29,10 @@ services:
     extends:
       file: docker-compose.app.yml
       service: inventory-expiry-cron
+  user-cleanup:
+    extends:
+      file: docker-compose.app.yml
+      service: user-cleanup
   web:
     extends:
       file: docker-compose.frontend.yml

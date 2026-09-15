@@ -13,6 +13,7 @@ from app.apis.users.models import User
 from app.apis.users.repository import UserRepository
 from app.core.configs.config import settings
 from app.core.logging import get_logger
+from app.core.redis.client import redis_client
 from app.iam.password_service import PasswordService
 from app.iam.schema import JWTBasePayload, TokenResponse
 from app.iam.token_service import TokenService
@@ -45,8 +46,16 @@ class AuthService:
     async def request_password_reset(self, email: str) -> None:
         # Serialize requests and confirmation on the user row. Replacing the hash
         # invalidates every previous reset link in the same transaction as enqueueing.
+        allowed = await redis_client.set(
+            f"password-reset:{email}",
+            "1",
+            nx=True,
+            ex=settings.PASSWORD_RESET_COOLDOWN_SECONDS,
+        )
+        logger.info("password_reset_requested", throttled=not bool(allowed))
+        if not allowed:
+            return
         user = await self.user_repo.get_by_email(email=email, for_update=True)
-        logger.info("password_reset_requested")
         if user is None or not user.is_active:
             return
         token = secrets.token_urlsafe(32)
