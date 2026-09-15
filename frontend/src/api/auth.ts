@@ -91,3 +91,27 @@ export async function register(
   }
   return body;
 }
+
+async function passwordResetRequest(path: string, payload: object): Promise<void> {
+  const response = await fetch(`${API_BASE}/users/password-reset/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      typeof body.detail === "string"
+        ? body.detail
+        : "Unable to reset your password. Check your details and try again.",
+    );
+  }
+}
+
+export function requestPasswordReset(email: string): Promise<void> {
+  return passwordResetRequest("request", { email });
+}
+
+export function resetPassword(token: string, password: string, confirmation: string): Promise<void> {
+  return passwordResetRequest("confirm", { token, password, confirm_password: confirmation });
+}

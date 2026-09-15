@@ -93,6 +93,8 @@ export default function Login({ onLogin }: Props) {
           />
         </div>
 
+        <Link to="/forgot-password" style={{ color: "#2563eb", textAlign: "right" }}>Forgot password?</Link>
+
         {error && (
           <div
             style={{

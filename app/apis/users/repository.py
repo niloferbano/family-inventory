@@ -31,8 +31,12 @@ class UserRepository:
         return sa.select(User)
 
     # Query Object Pattern (Core)
-    async def get_by_email(self, email: str) -> User | None:
+    async def get_by_email(
+        self, email: str, *, for_update: bool = False
+    ) -> User | None:
         query = get_user_by_email_query(email)
+        if for_update:
+            query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

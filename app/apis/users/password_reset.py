@@ -4,48 +4,36 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.notifications.models import NotificationOutbox
-from app.apis.notifications.repository import NotificationOutboxRepository
-from app.apis.users.exceptions import InvalidCredentials, InvalidResetToken
+from app.apis.notifications.repository.outbox_repository import \
+    NotificationOutboxRepository
 from app.apis.users.models import User
-from app.apis.users.repository import UserRepository
 from app.core.configs.config import settings
 from app.core.logging import get_logger
 from app.iam.password_service import PasswordService
-from app.iam.schema import JWTBasePayload, TokenResponse
-from app.iam.token_service import TokenService
 
 logger = get_logger(__name__)
 RESET_TOPIC = "users.password_reset.requested"
 
 
-class AuthService:
-    def __init__(self, session: AsyncSession):
+class InvalidResetToken(Exception):
+    pass
+
+
+class PasswordResetService:
+    def __init__(self, session):
         self.session = session
-        self.user_repo = UserRepository(session)
-
-    async def login(self, email: str, password: str):
-        user = await self.user_repo.get_by_email(email)
-        if not user or not user.is_active:
-            raise InvalidCredentials()
-
-        if not PasswordService.verify(
-            password=password, hashed_password=user.hashed_password
-        ):
-            raise InvalidCredentials()
-        payload = JWTBasePayload(
-            user_id=str(user.id), is_admin=user.is_admin, email=user.email
+        self.notification_outbox_repo = NotificationOutboxRepository(
+            session=self.session
         )
 
-        access_token = TokenService.create_access_token(payload)
-        return TokenResponse(access_token=access_token)
-
-    async def request_password_reset(self, email: str) -> None:
+    async def request(self, email: str) -> None:
         # Serialize requests and confirmation on the user row. Replacing the hash
         # invalidates every previous reset link in the same transaction as enqueueing.
-        user = await self.user_repo.get_by_email(email=email, for_update=True)
+        user = await self.session.scalar(
+            select(User).where(User.email == email).with_for_update()
+        )
         logger.info("password_reset_requested")
         if user is None or not user.is_active:
             return
@@ -56,7 +44,7 @@ class AuthService:
         )
         event_id = uuid4()
         link = f"{str(settings.PUBLIC_BASE_URL).rstrip('/')}/reset-password/{token}"
-        NotificationOutboxRepository(self.session).add(
+        self.session.add(
             NotificationOutbox(
                 event_id=event_id,
                 topic=RESET_TOPIC,
@@ -73,7 +61,7 @@ class AuthService:
         )
         await self.session.flush()
 
-    async def reset_password(self, token: str, password: str) -> None:
+    async def reset(self, token: str, password: str) -> None:
         digest = hashlib.sha256(token.encode()).hexdigest()
         user = await self.session.scalar(
             select(User).where(User.password_reset_hash == digest).with_for_update()
