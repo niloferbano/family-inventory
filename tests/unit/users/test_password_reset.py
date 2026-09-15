@@ -16,6 +16,14 @@ from app.apis.users.models import User
 from app.iam.password_service import PasswordService
 
 
+@pytest.fixture(autouse=True)
+def reset_cooldown(monkeypatch):
+    # Each test owns its throttle state; token lifecycle tests simulate allowed requests.
+    limiter = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.apis.users.auth_service.redis_client.set", limiter)
+    return limiter
+
+
 @pytest_asyncio.fixture
 async def account(mock_db):
     async with mock_db.begin() as session:
@@ -200,3 +208,27 @@ async def test_reset_email_through_worker(client, mock_db, account, monkeypatch)
     async with mock_db.begin() as session:
         delivery = await session.scalar(select(NotificationDelivery))
         assert delivery.status.value == "sent"
+
+
+@pytest.mark.asyncio
+async def test_reset_cooldown_suppresses_duplicate_email(
+    client, mock_db, account, reset_cooldown
+):
+    from app.core.configs.config import settings
+
+    reset_cooldown.side_effect = [True, False]
+    first = await client.post(
+        "/users/password-reset/request", json={"email": "reset@example.com"}
+    )
+    second = await client.post(
+        "/users/password-reset/request", json={"email": "reset@example.com"}
+    )
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert reset_cooldown.call_args.kwargs == {
+        "nx": True,
+        "ex": settings.PASSWORD_RESET_COOLDOWN_SECONDS,
+    }
+    async with mock_db.begin() as session:
+        rows = (await session.scalars(select(NotificationOutbox))).all()
+        assert len(rows) == 1

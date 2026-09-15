@@ -27,3 +27,8 @@ class User(SQLBase, TimeStampMixin):
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    activation_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    activation_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

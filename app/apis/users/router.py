@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.apis.users.auth_service import AuthService
-from app.apis.users.exceptions import (InvalidCredentials, InvalidResetToken,
-                                       UserAlreadyExists,
+from app.apis.users.exceptions import (InvalidActivationToken,
+                                       InvalidCredentials, InvalidResetToken,
+                                       UserAlreadyActive, UserAlreadyExists,
                                        UserNameAlreadyExists)
 from app.apis.users.schema import (PaginatedUsersResponse,
                                    PasswordResetConfirm, PasswordResetRequest,
@@ -51,6 +52,21 @@ async def register_user(
             ) from exc
 
 
+@router.get(path="/activate/{key}", status_code=status.HTTP_200_OK)
+async def check_activation_key(key: str, db_manager=Depends(get_db)):
+    async with db_manager.begin() as session:
+        user_service = UserService(session=session)
+        try:
+            await user_service.validate_activation_link(key)
+        except InvalidActivationToken:
+            raise HTTPException(
+                status_code=400, detail="Invalid or expired activation link"
+            )
+        except UserAlreadyActive:
+            raise HTTPException(status_code=400, detail="ALREADY_ACTIVE")
+        return {"message": "Activation key is valid"}
+
+
 @router.post(path="/activate/{key}", status_code=status.HTTP_201_CREATED)
 async def activate_user(
     key: ActivationKey, payload: UserActivationRequest, db_manager=Depends(get_db)
@@ -64,7 +80,7 @@ async def activate_user(
             )
 
             return {"message": "User activated successfully"}
-        except ValueError:
+        except InvalidActivationToken:
             raise HTTPException(
                 status_code=400, detail="Invalid or expired activation link"
             )
@@ -157,3 +173,13 @@ async def confirm_password_reset(
         )
     logger.info("password_reset_completed")
     return {"message": "Password reset successfully. Log in with your new password."}
+
+
+@router.post("/resend-activation")
+async def resend_activation(payload: PasswordResetRequest, db_manager=Depends(get_db)):
+    async with db_manager.begin() as session:
+        await UserService(session).resend_activation(str(payload.email))
+    logger.info("activation_resend_completed")
+    return {
+        "message": "If an eligible account exists, an activation email will be sent."
+    }
