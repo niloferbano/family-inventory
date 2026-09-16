@@ -1,4 +1,6 @@
+import hashlib
 import secrets
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -7,7 +9,9 @@ from sqlalchemy.exc import IntegrityError
 
 from app.apis.notifications.models import NotificationOutbox
 from app.apis.notifications.repository import NotificationOutboxRepository
-from app.apis.users.exceptions import UserAlreadyExists, UserNameAlreadyExists
+from app.apis.users.exceptions import (InvalidActivationToken,
+                                       UserAlreadyActive, UserAlreadyExists,
+                                       UserNameAlreadyExists)
 from app.apis.users.models import User as UserModel
 from app.apis.users.repository import UserRepository
 from app.apis.users.schema import (GetUserResponse, PaginatedUsersResponse,
@@ -15,9 +19,13 @@ from app.apis.users.schema import (GetUserResponse, PaginatedUsersResponse,
                                    UserRegisterResponse)
 from app.core.configs.config import settings
 from app.core.database.pagination import Page, apply_pagination
+from app.core.logging import get_logger
+from app.core.redis.client import redis_client
 from app.iam.password_service import PasswordService
 from app.iam.token_service import TokenService
 from app.iam.types import ActivationKey
+
+logger = get_logger(__name__)
 
 
 class UserService:
@@ -31,10 +39,13 @@ class UserService:
         user_input: UserActivationRequest,
     ) -> UserModel:
 
-        raw_user_data = await TokenService.verify_activation_token(activation_key)
+        try:
+            raw_user_data = await TokenService.verify_activation_token(activation_key)
+        except ValueError as exc:
+            raise InvalidActivationToken() from exc
 
         if not raw_user_data:
-            raise ValueError("Invalid or expired activation token")
+            raise InvalidActivationToken()
 
         user_base = UserBase.model_validate_json(raw_user_data)
 
@@ -44,7 +55,14 @@ class UserService:
             .with_for_update()
         )
         if user is None or user.is_active or user.username != user_base.username:
-            raise ValueError("Invalid or expired activation token")
+            raise InvalidActivationToken()
+        if user.activation_token_hash is not None and (
+            user.activation_token_hash
+            != hashlib.sha256(str(activation_key).encode()).hexdigest()
+            or user.activation_expires_at is None
+            or user.activation_expires_at <= datetime.now(timezone.utc)
+        ):
+            raise InvalidActivationToken()
         user.hashed_password = PasswordService.hash(
             user_input.password.get_secret_value()
         )
@@ -66,7 +84,59 @@ class UserService:
             await self.user_repo.create(user)
         except IntegrityError:
             raise UserNameAlreadyExists()
+        await self._queue_activation(user, user_data)
+        return UserRegisterResponse()
+
+    async def validate_activation_link(self, key: str) -> None:
+        input_hash = hashlib.sha256(str(key).encode()).hexdigest()
+        try:
+            raw_user_data = await TokenService.verify_activation_token(token=key)
+        except ValueError:
+            raw_user_data = None
+        if not raw_user_data:
+            user = await self.user_repo.get_by_activation_token_hash(input_hash)
+            if user and user.is_active:
+                raise UserAlreadyActive()
+            raise InvalidActivationToken()
+        user_base = UserBase.model_validate_json(raw_user_data)
+        user = await self.user_repo.get_by_email(str(user_base.email))
+        if user is None or user.username != user_base.username:
+            raise InvalidActivationToken()
+        if user.activation_token_hash is not None and (
+            user.activation_token_hash != input_hash
+            or user.activation_expires_at is None
+            or user.activation_expires_at <= datetime.now(timezone.utc)
+        ):
+            raise InvalidActivationToken()
+        if user.is_active:
+            raise UserAlreadyActive()
+
+    async def resend_activation(self, email: str) -> None:
+        # Same response and throttle behavior for unknown, active and inactive users.
+        key = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+        allowed = await redis_client.set(
+            f"activation-resend:{key}",
+            "1",
+            nx=True,
+            ex=settings.ACTIVATION_RESEND_COOLDOWN_SECONDS,
+        )
+        logger.info("activation_resend_requested", throttled=not bool(allowed))
+        if not allowed:
+            return
+        user = await self.user_repo.get_by_email(email, for_update=True)
+        if user is None or user.is_active:
+            return
+        await self._queue_activation(
+            user, UserBase(username=user.username, email=user.email)
+        )
+
+    async def _queue_activation(self, user: UserModel, user_data: UserBase) -> None:
         token = await TokenService.create_activation_token(user_data=user_data)
+        user.activation_token_hash = hashlib.sha256(str(token).encode()).hexdigest()
+        user.activation_expires_at = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACTIVATION_TOKEN_EXPIRE_MINUTES
+        )
+        logger.info("activation_email_requested", user_id=str(user.id))
         event_id = uuid4()
         link = f"{str(settings.PUBLIC_BASE_URL).rstrip('/')}/activate/{quote(str(token), safe='')}"
         NotificationOutboxRepository(self.session).add(
@@ -85,7 +155,6 @@ class UserService:
             )
         )
         await self.session.flush()
-        return UserRegisterResponse()
 
     async def get_all_users(
         self,

@@ -1,4 +1,4 @@
-from pydantic import HttpUrl
+from pydantic import Field, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.configs.cache_config import CacheConfiguration
@@ -25,7 +25,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
-    ACTIVATION_TOKEN_EXPIRE_MINUTES: int = 30
+    PASSWORD_RESET_COOLDOWN_SECONDS: int = Field(default=60, gt=0)
+    ACTIVATION_TOKEN_EXPIRE_MINUTES: int = Field(default=30, gt=0)
+    ACTIVATION_RESEND_COOLDOWN_SECONDS: int = Field(default=60, gt=0)
+    UNACTIVATED_USER_RETENTION_DAYS: int = Field(default=7, gt=0)
+    USER_CLEANUP_INTERVAL_SECONDS: int = Field(default=3600, gt=0)
     HOST: str = "127.0.0.1"
     PORT: int = 8000
     RELOAD: bool = True  # auto-reload only in dev

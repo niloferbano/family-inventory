@@ -213,8 +213,9 @@ async def test_invalid_activation_returns_400(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resend", [False, True])
 async def test_activation_outbox_through_consumer_and_email_sender(
-    client, mock_db, monkeypatch
+    client, mock_db, monkeypatch, resend
 ):
     import json
     from types import SimpleNamespace
@@ -240,9 +241,27 @@ async def test_activation_outbox_through_consumer_and_email_sender(
     smtp = MagicMock()
     factory = MagicMock(return_value=smtp)
     monkeypatch.setattr(channels.smtplib, "SMTP", factory)
-    response = await client.post(
-        "/users/register", json={"username": "queued", "email": "queued@example.com"}
-    )
+    if resend:
+        async with mock_db.begin() as session:
+            session.add(
+                User(
+                    username="queued",
+                    email="queued@example.com",
+                    hashed_password="unused",
+                    is_active=False,
+                )
+            )
+        monkeypatch.setattr(
+            "app.apis.users.user_service.redis_client.set", AsyncMock(return_value=True)
+        )
+        response = await client.post(
+            "/users/resend-activation", json={"email": "queued@example.com"}
+        )
+    else:
+        response = await client.post(
+            "/users/register",
+            json={"username": "queued", "email": "queued@example.com"},
+        )
     assert response.status_code == 200
     broker = SimpleNamespace(publish=AsyncMock())
     assert (

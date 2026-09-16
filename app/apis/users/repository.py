@@ -40,6 +40,15 @@ class UserRepository:
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_by_activation_token_hash(
+        self, token_hash: str, *, for_update: bool = False
+    ) -> User | None:
+        query = sa.select(User).where(User.activation_token_hash == token_hash)
+        if for_update:
+            query = query.with_for_update()
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def count_active_users(self) -> int:
         query = count_active_users_query()
         result = await self.session.execute(query)
