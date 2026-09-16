@@ -1,6 +1,6 @@
 {$SITE_ADDRESS:localhost} {
     encode zstd gzip
-    @backend path /api/* /docs /docs/* /openapi.json /redoc /oauth2-redirect
+    @backend path /health /api/* /docs /docs/* /openapi.json /redoc /oauth2-redirect
     handle @backend {
         reverse_proxy api:8000
     }
