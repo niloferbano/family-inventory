@@ -25,7 +25,7 @@ test -s "$backup"
 # Confirm the public proxy returns API JSON, not the SPA's fallback HTML.
 healthy=false
 for attempt in {1..12}; do
-  if curl --silent --show-error --fail --max-time 10 https://inventory.nilofer.com/health \
+  if curl --silent --show-error --fail --max-time 10 https://inventory.niloferbano.com/health \
       | python3 -c 'import json,sys; assert json.load(sys.stdin).get("status") == "ok"'; then
     healthy=true
     break
@@ -33,7 +33,7 @@ for attempt in {1..12}; do
   sleep 5
 done
 [[ "$healthy" == true ]]
-curl --silent --show-error --fail --max-time 20 https://inventory.nilofer.com/ > /dev/null
+curl --silent --show-error --fail --max-time 20 https://inventory.niloferbano.com/ > /dev/null
 "${compose[@]}" ps -a
 # Persist the successful tag for subsequent manual Compose commands.
 python3 - "$base/.env" "$release_sha" <<'PY'
