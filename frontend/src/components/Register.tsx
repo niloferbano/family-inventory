@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { register } from "../api/auth";
+import { register, resendActivation } from "../api/auth";
 
 export default function Register() {
   const [username, setUsername] = useState("");
@@ -8,6 +8,26 @@ export default function Register() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const [resendPending, setResendPending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
+  const [resendError, setResendError] = useState("");
+
+  async function handleResend() {
+    if (resendPending || resendMessage || !submittedEmail) return;
+    setResendPending(true);
+    setResendMessage("");
+    setResendError("");
+    try {
+      await resendActivation(submittedEmail);
+      setResendMessage(
+        "If an account with this email needs activation, we've sent a new link.",
+      );
+    } catch {
+      setResendError("Unable to request an activation link. Please try again later.");
+    } finally {
+      setResendPending(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -36,15 +56,28 @@ export default function Register() {
   if (submittedEmail) {
     return (
       <section style={{ maxWidth: 400, margin: "24px auto" }}>
-        <h2>Check your email</h2>
+        <h2>Registration request received</h2>
         <p role="status">
-          An activation email has been queued for {submittedEmail}.
+          If this email is eligible for registration, you’ll receive an activation
+          link. If you already activated your account, you can log in.
         </p>
         <p>
           Delivery may take a moment. Follow the link to choose your password
           and activate your account. Check your spam folder too.
         </p>
-        <Link to="/login">Back to login</Link>
+        {!resendMessage && (
+          <>
+            <p>Need a new activation link?</p>
+            <button type="button" onClick={handleResend} disabled={resendPending}>
+              {resendPending ? "Sending…" : "Resend activation link"}
+            </button>
+          </>
+        )}
+        {resendMessage && <p role="status">{resendMessage}</p>}
+        {resendError && <p role="alert" style={{ color: "#b00020" }}>{resendError}</p>}
+        <p>
+          <Link to="/login">Back to login</Link>
+        </p>
       </section>
     );
   }

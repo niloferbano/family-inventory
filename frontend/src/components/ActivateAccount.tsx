@@ -24,6 +24,7 @@ export default function ActivateAccount() {
   const [resendEmail, setResendEmail] = useState("");
   const [resendPending, setResendPending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
+  const [resendDone, setResendDone] = useState(false);
 
   // 1. Verify token on page load (GET)
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function ActivateAccount() {
   // 3. Handle requesting a new link
   async function handleResend(e: React.FormEvent) {
     e.preventDefault();
-    if (!resendEmail || resendPending) return;
+    if (!resendEmail || resendPending || resendDone) return;
     setResendPending(true);
     setResendMessage("");
 
@@ -125,7 +126,8 @@ export default function ActivateAccount() {
         throw new Error(body.detail || "Failed to send activation link.");
       }
 
-      setResendMessage(body.message || "If an eligible account exists, an activation email will be sent.");
+      setResendMessage(body.message || "If an account with this email needs activation, we've sent a new link.");
+      setResendDone(true);
     } catch (err) {
       setResendMessage(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -159,6 +161,13 @@ export default function ActivateAccount() {
         <h2>Link Expired or Invalid</h2>
         <p>This activation link has expired or has already been used.</p>
         
+        {resendDone ? (
+          <>
+            <p role="status">{resendMessage}</p>
+            <p>Check your inbox and spam folder. Delivery may take a moment.</p>
+            <Link to="/login">Back to login</Link>
+          </>
+        ) : (
         <form onSubmit={handleResend} style={{ marginTop: "20px", textAlign: "left" }}>
           <label style={{ display: "block", fontSize: "14px", marginBottom: "6px" }}>
             Enter your email to receive a new link:
@@ -166,6 +175,7 @@ export default function ActivateAccount() {
           <input
             type="email"
             required
+            disabled={resendPending}
             placeholder="your@email.com"
             value={resendEmail}
             onChange={(e) => setResendEmail(e.target.value)}
@@ -175,11 +185,12 @@ export default function ActivateAccount() {
             {resendPending ? "Sending..." : "Resend Activation Link"}
           </button>
           {resendMessage && (
-            <p style={{ marginTop: "10px", fontSize: "14px", color: "#333" }}>
+            <p role="alert" style={{ marginTop: "10px", fontSize: "14px", color: "#333" }}>
               {resendMessage}
             </p>
           )}
         </form>
+        )}
       </div>
     );
   }

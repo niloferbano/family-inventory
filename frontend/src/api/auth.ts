@@ -92,6 +92,17 @@ export async function register(
   return body;
 }
 
+export async function resendActivation(email: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/users/resend-activation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to request an activation link. Please try again later.");
+  }
+}
+
 async function passwordResetRequest(path: string, payload: object): Promise<void> {
   const response = await fetch(`${API_BASE}/users/password-reset/${path}`, {
     method: "POST",
