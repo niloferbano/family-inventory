@@ -1,7 +1,12 @@
 # Automatic production deployment
 
-The deployment workflow runs after successful `tests` push runs for `main` in this
-repository. Protect `main` with PR review requirements to enforce merge-only changes.
+The deployment workflow is triggered when either `tests` or `Code Quality` completes
+for `main`. It verifies that both push workflows passed for the same commit in this
+repository before building or deploying. Missing, running, failed, or cancelled
+checks skip deployment. The latest successful completion event initiates deployment,
+so either completion order works without deploying twice. A successful rerun can
+trigger deployment once both checks pass.
+Protect `main` with PR reviews and required `pytest`, `ruff`, and `mypy` checks.
 Both images use the tested commit SHA. Deployment files come from the same commit.
 The workflow serializes deployments through its production concurrency group.
 
