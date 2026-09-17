@@ -8,7 +8,8 @@ from sqlalchemy import select
 from app.apis.notifications.models import NotificationOutbox
 from app.apis.users.exceptions import InvalidActivationToken
 from app.apis.users.models import User
-from app.apis.users.schema import UserActivationRequest, UserBase
+from app.apis.users.schema import (ResendActivationResponse,
+                                   UserActivationRequest, UserBase)
 from app.apis.users.user_service import UserService
 from app.core.configs.config import settings
 from app.iam.token_service import TokenService
@@ -111,7 +112,8 @@ async def test_resend_generic_and_throttled(
         )
     )
     assert all(
-        r.status_code == 200 and r.json() == responses[0].json() for r in responses
+        r.status_code == 200 and r.json() == ResendActivationResponse().model_dump()
+        for r in responses
     )
     assert throttle.call_args.kwargs == {
         "nx": True,

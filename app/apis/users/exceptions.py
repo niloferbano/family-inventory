@@ -20,3 +20,7 @@ class InvalidResetToken(Exception):
 
 class InvalidActivationToken(Exception):
     pass
+
+
+class UserNotActive(Exception):
+    pass

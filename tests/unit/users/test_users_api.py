@@ -1,11 +1,154 @@
+import asyncio
+
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
+from app.apis.notifications.models import NotificationOutbox
 from app.apis.users.models import User
-from app.apis.users.schema import UserBase
+from app.apis.users.repository import UserRepository
+from app.apis.users.schema import UserBase, UserRegisterResponse
 from app.iam.password_service import PasswordService
 from app.iam.token_service import TokenService
 from app.iam.types import ActivationKey
+
+
+@pytest.mark.asyncio
+async def test_concurrent_registration_same_details(client, mock_db, monkeypatch):
+    both_ready = asyncio.Event()
+    attempts = 0
+    conflicts = 0
+    create = UserRepository.create
+
+    async def synchronized_create(repo, user):
+        nonlocal attempts, conflicts
+        attempts += 1
+        if attempts == 2:
+            both_ready.set()
+        # Both requests must pass the existence checks before either inserts.
+        await asyncio.wait_for(both_ready.wait(), timeout=5)
+        try:
+            return await create(repo, user)
+        except IntegrityError:
+            conflicts += 1
+            raise
+
+    async def fake_create_activation_token(cls, user_data):
+        return ActivationKey("c" * 32)
+
+    monkeypatch.setattr(UserRepository, "create", synchronized_create)
+    monkeypatch.setattr(
+        TokenService,
+        "create_activation_token",
+        classmethod(fake_create_activation_token),
+    )
+    payload = {"username": "concurrent", "email": "concurrent@example.com"}
+    responses = await asyncio.wait_for(
+        asyncio.gather(
+            client.post("/users/register", json=payload),
+            client.post("/users/register", json=payload),
+        ),
+        timeout=15,
+    )
+
+    assert attempts == 2
+    assert conflicts == 1
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    for response in responses:
+        if response.status_code == 200:
+            assert response.json() == UserRegisterResponse().model_dump()
+        else:
+            # Resolving this conflict requires a working query after rollback
+            # to the savepoint; an aborted outer transaction would fail here.
+            assert response.json() == {
+                "detail": "Username is unavailable. Please choose another username."
+            }
+
+    async with mock_db.begin() as session:
+        users = (await session.scalars(select(User))).all()
+        assert len(users) == 1
+        assert users[0].username == payload["username"]
+        assert users[0].email == payload["email"]
+        assert not users[0].is_active
+        outbox = (await session.scalars(select(NotificationOutbox))).all()
+        assert len(outbox) == 1
+        assert outbox[0].topic == "users.activation.requested"
+        assert outbox[0].payload["user_id"] == str(users[0].id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duplicate", ["email", "username", "both"])
+async def test_register_insert_conflict_after_checks(
+    client, db_session, monkeypatch, duplicate
+):
+    existing = User(
+        username="existing",
+        email="dup@example.com",
+        hashed_password="unchanged",
+        is_active=False,
+    )
+    db_session.add(existing)
+    await db_session.commit()
+    username_checks = 0
+    email_checks = 0
+    conflicts = 0
+    get_by_username = UserRepository.get_by_username
+    get_by_email = UserRepository.get_by_email
+    create = UserRepository.create
+
+    async def initially_missing_username(repo, username):
+        nonlocal username_checks
+        username_checks += 1
+        if username_checks == 1:
+            return None
+        # Execute a real query in the request's transaction after the failed
+        # insert. This fails if the savepoint did not restore the session.
+        return await get_by_username(repo, username)
+
+    async def initially_missing_email(repo, email, **kwargs):
+        nonlocal email_checks
+        email_checks += 1
+        if email_checks == 1:
+            return None
+        return await get_by_email(repo, email, **kwargs)
+
+    async def real_insert(repo, user):
+        nonlocal conflicts
+        try:
+            return await create(repo, user)
+        except IntegrityError:
+            conflicts += 1
+            raise
+
+    monkeypatch.setattr(UserRepository, "get_by_username", initially_missing_username)
+    monkeypatch.setattr(UserRepository, "get_by_email", initially_missing_email)
+    monkeypatch.setattr(UserRepository, "create", real_insert)
+    response = await client.post(
+        "/users/register",
+        json={
+            "username": "newuser" if duplicate == "email" else "existing",
+            "email": (
+                "new@example.com" if duplicate == "username" else "dup@example.com"
+            ),
+        },
+    )
+
+    assert conflicts == 1
+    assert username_checks == 2
+    assert email_checks == 1
+    if duplicate == "email":
+        assert response.status_code == 200
+        assert response.json() == UserRegisterResponse().model_dump()
+    else:
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": "Username is unavailable. Please choose another username."
+        }
+    assert (await db_session.scalars(select(User))).all() == [existing]
+    assert (await db_session.scalars(select(NotificationOutbox))).all() == []
+    await db_session.refresh(existing)
+    assert existing.hashed_password == "unchanged"
+    assert not existing.is_active
 
 
 @pytest.mark.asyncio
@@ -35,7 +178,7 @@ async def test_register_user_queues_activation_email(client, db_session, monkeyp
 
     assert res.status_code == 200
     body = res.json()
-    assert "activation_key" not in body
+    assert body == UserRegisterResponse().model_dump()
     user = await db_session.scalar(
         select(User).where(User.email == "newuser@example.com")
     )
@@ -73,12 +216,16 @@ async def test_register_user_queues_activation_email(client, db_session, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email_returns_409(client, db_session):
+@pytest.mark.parametrize("active", [True, False])
+@pytest.mark.parametrize("duplicate", ["email", "username", "both"])
+async def test_register_duplicate_preserves_email_privacy(
+    client, db_session, active, duplicate
+):
     user = User(
         username="existing",
         email="dup@example.com",
         hashed_password="hashed",
-        is_active=True,
+        is_active=active,
         is_admin=False,
     )
     db_session.add(user)
@@ -86,12 +233,28 @@ async def test_register_duplicate_email_returns_409(client, db_session):
 
     res = await client.post(
         "/users/register",
-        json={"username": "newuser", "email": "dup@example.com"},
+        json={
+            "username": "existing" if duplicate in ("username", "both") else "newuser",
+            "email": (
+                "new@example.com" if duplicate == "username" else "dup@example.com"
+            ),
+        },
     )
 
-    assert res.status_code == 409
-    body = res.json()
-    assert body["detail"] == "User already exists."
+    if duplicate == "email":
+        assert res.status_code == 200
+        assert res.json() == UserRegisterResponse().model_dump()
+    else:
+        assert res.status_code == 409
+        assert res.json() == {
+            "detail": "Username is unavailable. Please choose another username."
+        }
+    from app.apis.notifications.models import NotificationOutbox
+
+    assert (await db_session.scalars(select(NotificationOutbox))).all() == []
+    await db_session.refresh(user)
+    assert user.is_active == active
+    assert user.hashed_password == "hashed"
 
 
 @pytest.mark.asyncio

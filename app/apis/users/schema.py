@@ -79,7 +79,15 @@ class TokenResponse(BaseApiSchema):
 
 
 class UserRegisterResponse(BaseApiSchema):
-    message: str = "Registration received. Your activation email has been queued."
+    message: str = (
+        "If this email isn't already registered, check your inbox for a confirmation link."
+    )
+
+
+class ResendActivationResponse(BaseApiSchema):
+    message: str = (
+        "If an account with this email needs activation, we've sent a new link."
+    )
 
 
 class PasswordResetRequest(BaseApiSchema):

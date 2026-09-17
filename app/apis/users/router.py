@@ -7,6 +7,7 @@ from app.apis.users.exceptions import (InvalidActivationToken,
                                        UserNameAlreadyExists)
 from app.apis.users.schema import (PaginatedUsersResponse,
                                    PasswordResetConfirm, PasswordResetRequest,
+                                   ResendActivationResponse,
                                    UserActivationRequest, UserBase,
                                    UserRegisterResponse)
 from app.apis.users.user_service import UserService
@@ -32,23 +33,14 @@ async def me(user=Depends(get_current_user)):
 async def register_user(
     user_input: UserBase,
     db_manager=Depends(get_db),
-) -> UserRegisterResponse | None:
+) -> UserRegisterResponse:
     async with db_manager.begin() as session:
-        user_service = UserService(session)
         try:
-            return await user_service.register_user(user_data=user_input)
-        except UserNameAlreadyExists:
-            raise HTTPException(status_code=409, detail="User name already exists")
-        except UserAlreadyExists:
+            return await UserService(session).register_user(user_data=user_input)
+        except UserNameAlreadyExists as exc:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail=str("User already exists.")
-            )
-        except (
-            Exception
-        ) as exc:  # pragma: no cover - FastAPI will format error response
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
+                status_code=409,
+                detail="Username is unavailable. Please choose another username.",
             ) from exc
 
 
@@ -176,10 +168,10 @@ async def confirm_password_reset(
 
 
 @router.post("/resend-activation")
-async def resend_activation(payload: PasswordResetRequest, db_manager=Depends(get_db)):
+async def resend_activation(
+    payload: PasswordResetRequest, db_manager=Depends(get_db)
+) -> ResendActivationResponse:
     async with db_manager.begin() as session:
-        await UserService(session).resend_activation(str(payload.email))
+        response = await UserService(session).resend_activation(payload.email)
     logger.info("activation_resend_completed")
-    return {
-        "message": "If an eligible account exists, an activation email will be sent."
-    }
+    return response

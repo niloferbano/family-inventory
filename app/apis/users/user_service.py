@@ -4,17 +4,19 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from uuid import uuid4
 
+from pydantic import EmailStr
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.apis.notifications.models import NotificationOutbox
 from app.apis.notifications.repository import NotificationOutboxRepository
 from app.apis.users.exceptions import (InvalidActivationToken,
-                                       UserAlreadyActive, UserAlreadyExists,
+                                       UserAlreadyActive,
                                        UserNameAlreadyExists)
 from app.apis.users.models import User as UserModel
 from app.apis.users.repository import UserRepository
 from app.apis.users.schema import (GetUserResponse, PaginatedUsersResponse,
+                                   ResendActivationResponse,
                                    UserActivationRequest, UserBase,
                                    UserRegisterResponse)
 from app.core.configs.config import settings
@@ -71,9 +73,15 @@ class UserService:
         return user
 
     async def register_user(self, user_data: UserBase) -> UserRegisterResponse:
-
-        if await self.user_repo.get_by_email(email=user_data.email):
-            raise UserAlreadyExists()
+        # Check independently of email so this error cannot reveal whether
+        # the submitted email belongs to an existing account.
+        if await self.user_repo.get_by_username(user_data.username):
+            raise UserNameAlreadyExists()
+        user_db = await self.user_repo.get_by_email(email=user_data.email)
+        if user_db:
+            # Existing accounts share the same response; only the explicit
+            # resend endpoint may issue another activation link.
+            return UserRegisterResponse()
         user = UserModel(
             username=user_data.username,
             email=str(user_data.email),
@@ -81,9 +89,15 @@ class UserService:
             is_active=False,
         )
         try:
-            await self.user_repo.create(user)
-        except IntegrityError:
-            raise UserNameAlreadyExists()
+            # Preserve the transaction so a concurrent collision can be checked.
+            async with self.session.begin_nested():
+                await self.user_repo.create(user)
+        except IntegrityError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "23505":
+                raise
+            if await self.user_repo.get_by_username(user_data.username):
+                raise UserNameAlreadyExists() from exc
+            return UserRegisterResponse()
         await self._queue_activation(user, user_data)
         return UserRegisterResponse()
 
@@ -111,7 +125,7 @@ class UserService:
         if user.is_active:
             raise UserAlreadyActive()
 
-    async def resend_activation(self, email: str) -> None:
+    async def resend_activation(self, email: EmailStr) -> ResendActivationResponse:
         # Same response and throttle behavior for unknown, active and inactive users.
         key = hashlib.sha256(email.strip().lower().encode()).hexdigest()
         allowed = await redis_client.set(
@@ -122,13 +136,14 @@ class UserService:
         )
         logger.info("activation_resend_requested", throttled=not bool(allowed))
         if not allowed:
-            return
+            return ResendActivationResponse()
         user = await self.user_repo.get_by_email(email, for_update=True)
         if user is None or user.is_active:
-            return
+            return ResendActivationResponse()
         await self._queue_activation(
             user, UserBase(username=user.username, email=user.email)
         )
+        return ResendActivationResponse()
 
     async def _queue_activation(self, user: UserModel, user_data: UserBase) -> None:
         token = await TokenService.create_activation_token(user_data=user_data)

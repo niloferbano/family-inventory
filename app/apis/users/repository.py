@@ -30,6 +30,12 @@ class UserRepository:
     def get_all_query(self) -> sa.Select:
         return sa.select(User)
 
+    async def get_by_username(self, username: str) -> User | None:
+        result = await self.session.execute(
+            sa.select(User).where(User.username == username)
+        )
+        return result.scalar_one_or_none()
+
     # Query Object Pattern (Core)
     async def get_by_email(
         self, email: str, *, for_update: bool = False
