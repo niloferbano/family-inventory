@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from app.apis.notifications.models import NotificationOutbox
 from app.apis.notifications.repository import NotificationOutboxRepository
 from app.apis.users.exceptions import (InvalidActivationToken,
-                                       UserAlreadyActive, UserAlreadyExists,
+                                       UserAlreadyActive,
                                        UserNameAlreadyExists)
 from app.apis.users.models import User as UserModel
 from app.apis.users.repository import UserRepository
@@ -79,11 +79,9 @@ class UserService:
             raise UserNameAlreadyExists()
         user_db = await self.user_repo.get_by_email(email=user_data.email)
         if user_db:
-            if not user_db.is_active:
-                await self._queue_activation(user_db, user_data)
-                return UserRegisterResponse()
-            else:
-                raise UserAlreadyExists()
+            # Existing accounts share the same response; only the explicit
+            # resend endpoint may issue another activation link.
+            return UserRegisterResponse()
         user = UserModel(
             username=user_data.username,
             email=str(user_data.email),

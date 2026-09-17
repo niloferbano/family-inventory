@@ -42,11 +42,6 @@ async def register_user(
                 status_code=409,
                 detail="Username is unavailable. Please choose another username.",
             ) from exc
-        except UserAlreadyExists as exc:
-            raise HTTPException(
-                status_code=409,
-                detail="User already exists",
-            ) from exc
 
 
 @router.get(path="/activate/{key}", status_code=status.HTTP_200_OK)

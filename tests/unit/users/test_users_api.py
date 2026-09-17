@@ -77,6 +77,81 @@ async def test_concurrent_registration_same_details(client, mock_db, monkeypatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("duplicate", ["email", "username", "both"])
+async def test_register_insert_conflict_after_checks(
+    client, db_session, monkeypatch, duplicate
+):
+    existing = User(
+        username="existing",
+        email="dup@example.com",
+        hashed_password="unchanged",
+        is_active=False,
+    )
+    db_session.add(existing)
+    await db_session.commit()
+    username_checks = 0
+    email_checks = 0
+    conflicts = 0
+    get_by_username = UserRepository.get_by_username
+    get_by_email = UserRepository.get_by_email
+    create = UserRepository.create
+
+    async def initially_missing_username(repo, username):
+        nonlocal username_checks
+        username_checks += 1
+        if username_checks == 1:
+            return None
+        # Execute a real query in the request's transaction after the failed
+        # insert. This fails if the savepoint did not restore the session.
+        return await get_by_username(repo, username)
+
+    async def initially_missing_email(repo, email, **kwargs):
+        nonlocal email_checks
+        email_checks += 1
+        if email_checks == 1:
+            return None
+        return await get_by_email(repo, email, **kwargs)
+
+    async def real_insert(repo, user):
+        nonlocal conflicts
+        try:
+            return await create(repo, user)
+        except IntegrityError:
+            conflicts += 1
+            raise
+
+    monkeypatch.setattr(UserRepository, "get_by_username", initially_missing_username)
+    monkeypatch.setattr(UserRepository, "get_by_email", initially_missing_email)
+    monkeypatch.setattr(UserRepository, "create", real_insert)
+    response = await client.post(
+        "/users/register",
+        json={
+            "username": "newuser" if duplicate == "email" else "existing",
+            "email": (
+                "new@example.com" if duplicate == "username" else "dup@example.com"
+            ),
+        },
+    )
+
+    assert conflicts == 1
+    assert username_checks == 2
+    assert email_checks == 1
+    if duplicate == "email":
+        assert response.status_code == 200
+        assert response.json() == UserRegisterResponse().model_dump()
+    else:
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": "Username is unavailable. Please choose another username."
+        }
+    assert (await db_session.scalars(select(User))).all() == [existing]
+    assert (await db_session.scalars(select(NotificationOutbox))).all() == []
+    await db_session.refresh(existing)
+    assert existing.hashed_password == "unchanged"
+    assert not existing.is_active
+
+
+@pytest.mark.asyncio
 async def test_me_returns_current_user(client, auth_headers):
     res = await client.get("/users/me", headers=auth_headers)
 
