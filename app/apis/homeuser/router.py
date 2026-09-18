@@ -2,8 +2,11 @@ import uuid
 
 from fastapi import APIRouter, Depends
 
-from app.apis.homeuser.schema import (ChangeHomeUserRoleRequest,
-                                      HomeUserAddRequest, HomeUserAddResponse)
+from app.apis.homeuser.schema import (
+    ChangeHomeUserRoleRequest,
+    HomeUserAddRequest,
+    HomeUserAddResponse,
+)
 from app.apis.homeuser.service import HomeUserService
 from app.core.database.base import HomeId
 from app.core.database.session import get_db

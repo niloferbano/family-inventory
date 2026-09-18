@@ -10,16 +10,20 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.brokers import EventBroker, EventEnvelope
-from app.apis.notifications.models import (NotificationDelivery,
-                                           NotificationOutbox)
-from app.apis.notifications.repository import (NotificationEventRepository,
-                                               NotificationOutboxRepository)
+from app.apis.notifications.models import NotificationDelivery, NotificationOutbox
+from app.apis.notifications.repository import (
+    NotificationEventRepository,
+    NotificationOutboxRepository,
+)
 from app.apis.notifications.types import DeliveryStatus, NotificationChannel
 from app.apis.notifications.worker.channels import ChannelSender
 from app.apis.notifications.worker.handlers import (
-    ClaimedDelivery, build_failure_results_for_claimed,
-    claim_deliveries_to_send, finalize_delivery_results,
-    send_claimed_deliveries)
+    ClaimedDelivery,
+    build_failure_results_for_claimed,
+    claim_deliveries_to_send,
+    finalize_delivery_results,
+    send_claimed_deliveries,
+)
 from app.core.database.base import NotificationEventId
 from app.core.database.session import session_scope
 

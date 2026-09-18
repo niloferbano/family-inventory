@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.homes.exceptions import HomeAlreadyExists
 from app.apis.homes.models import Home
-from app.apis.homes.queries import (query_get_home_by_id,
-                                    query_get_home_by_name,
-                                    query_get_home_for_user)
+from app.apis.homes.queries import (
+    query_get_home_by_id,
+    query_get_home_by_name,
+    query_get_home_for_user,
+)
 from app.apis.homeuser.models import HomeUser, UserType
 from app.apis.users.models import User
 from app.core.database.base import HomeId, UserId

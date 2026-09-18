@@ -6,8 +6,9 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.apis.notifications.models import NotificationOutbox
-from app.apis.notifications.repository.outbox_repository import \
-    NotificationOutboxRepository
+from app.apis.notifications.repository.outbox_repository import (
+    NotificationOutboxRepository,
+)
 from app.apis.users.models import User
 from app.core.configs.config import settings
 from app.core.logging import get_logger

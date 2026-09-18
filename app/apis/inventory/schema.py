@@ -4,14 +4,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.apis.inventory.types import InventoryCategory
 from app.core.database.base import HomeId
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
 
 class InventoryCreateRequest(BaseModel):
     name: str
-    category: InventoryCategory
+    household_category_id: UUID
     quantity: int = 1
     unit: str = "pcs"
     expiry_date: date | None = None
@@ -20,7 +19,7 @@ class InventoryCreateRequest(BaseModel):
 
 class InventoryUpdateRequest(BaseModel):
     name: str | None = None
-    category: InventoryCategory | None = None
+    household_category_id: UUID | None = None
     quantity: int | None = None
     unit: str | None = None
     expiry_date: date | None = None
@@ -30,7 +29,7 @@ class InventoryUpdateRequest(BaseModel):
 class InventoryCreateResponse(BaseApiSchema):
     id: UUID
     name: str
-    category: InventoryCategory
+    household_category_id: UUID
     quantity: int
     unit: str
     expiry_date: date | None
@@ -41,7 +40,7 @@ class InventoryCreateResponse(BaseApiSchema):
 class InventoryGetResponse(BaseApiSchema):
     id: UUID
     name: str
-    category: InventoryCategory
+    household_category_id: UUID
     quantity: int
     unit: str
     expiry_date: date | None
@@ -59,7 +58,7 @@ class ExpiryFilter(StrEnum):
 
 
 class InventoryFilters(BaseApiSchema):
-    category: list[InventoryCategory] | None = None
+    household_category_id: list[UUID] | None = None
     expiry: ExpiryFilter | None = None
     days: int = Field(default=7, ge=1, le=365)
 

@@ -11,14 +11,15 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.apis.notifications.models import (NotificationDelivery,
-                                           NotificationEvent)
+from app.apis.notifications.models import NotificationDelivery, NotificationEvent
 from app.apis.notifications.repository import NotificationEventRepository
 from app.apis.notifications.services.ingest import NotificationIngestService
-from app.apis.notifications.services.realtime import \
-    NotificationRealtimeService
-from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
-                                          NotificationRecipientType)
+from app.apis.notifications.services.realtime import NotificationRealtimeService
+from app.apis.notifications.types import (
+    DeliveryStatus,
+    NotificationChannel,
+    NotificationRecipientType,
+)
 from app.apis.notifications.worker.channels import ChannelSender
 from app.core.database.base import NotificationEventId
 

@@ -3,13 +3,16 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+
 # IMPORTANT: ensure models are imported so SQLBase.metadata is populated
 # Import whichever modules define models:
 from app.apis.homes import models as _homes_models  # noqa: F401
 from app.apis.homeuser import models as _homeuser_models  # noqa: F401
+from app.apis.household_categories import (  # noqa: F401
+    models as _household_categories_models,
+)
 from app.apis.inventory import models as _inventory_models  # noqa: F401
-from app.apis.notifications import \
-    models as _notifications_models  # noqa: F401
+from app.apis.notifications import models as _notifications_models  # noqa: F401
 from app.apis.product import models as _product_models  # noqa: F401
 from app.apis.users import models as _users_models  # noqa: F401
 from app.core.configs.config import settings

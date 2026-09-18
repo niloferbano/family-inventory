@@ -11,6 +11,7 @@ InventoryId = NewType("InventoryId", PythonUUID)
 NotificationEventId = NewType("NotificationEventId", PythonUUID)
 InventoryExpiryAlertId = NewType("InventoryExpiryAlertId", PythonUUID)
 ProductId = NewType("ProductId", PythonUUID)
+HouseholdCategoryId = NewType("HouseholdCategoryId", PythonUUID)
 
 
 class SQLBase(DeclarativeBase):

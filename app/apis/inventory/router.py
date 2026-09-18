@@ -1,13 +1,18 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.apis.errors.errors import ErrorResponse
-from app.apis.inventory.schema import (ExpiryFilter, InventoryCreateRequest,
-                                       InventoryCreateResponse,
-                                       InventoryFilters, InventoryGetResponse,
-                                       InventoryUpdateRequest,
-                                       PaginatedInventoryItemResponse)
+from app.apis.inventory.schema import (
+    ExpiryFilter,
+    InventoryCreateRequest,
+    InventoryCreateResponse,
+    InventoryFilters,
+    InventoryGetResponse,
+    InventoryUpdateRequest,
+    PaginatedInventoryItemResponse,
+)
 from app.apis.inventory.services.service import InventoryService
-from app.apis.inventory.types import InventoryCategory
 from app.core.database.base import HomeId, InventoryId
 from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import get_db
@@ -43,7 +48,7 @@ async def list_inventory_items(
     pagination_params: PaginationParams = Depends(),
     expiry: ExpiryFilter | None = Query(default=None),
     days: int = Query(default=7, ge=1, le=365),
-    category: list[InventoryCategory] | None = Query(default=None),
+    household_category_id: list[UUID] | None = Query(default=None),
     db_manager=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -52,7 +57,7 @@ async def list_inventory_items(
         page_size=pagination_params.page_size,
     )
     filters = InventoryFilters(
-        category=category,
+        household_category_id=household_category_id,
         expiry=expiry,
         days=days,
     )

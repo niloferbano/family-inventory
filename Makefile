@@ -89,8 +89,8 @@ lint:
 
 format:
 	$(POETRY) run ruff check --fix .
-	$(POETRY) run black .
 	$(POETRY) run isort .
+	$(POETRY) run black .
 
 type-check:
 	$(POETRY) run mypy .

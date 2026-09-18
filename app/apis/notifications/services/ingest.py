@@ -7,13 +7,17 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.apis.notifications.models import (NotificationDelivery,
-                                           NotificationEvent)
+from app.apis.notifications.models import NotificationDelivery, NotificationEvent
 from app.apis.notifications.repository import (
-    NotificationEventRepository, NotificationSubscriptionRepository)
-from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
-                                          NotificationRecipientType,
-                                          NotificationSource)
+    NotificationEventRepository,
+    NotificationSubscriptionRepository,
+)
+from app.apis.notifications.types import (
+    DeliveryStatus,
+    NotificationChannel,
+    NotificationRecipientType,
+    NotificationSource,
+)
 from app.apis.users.repository import UserRepository
 from app.core.database.base import HomeId, NotificationEventId, UserId
 from app.core.logging import get_logger

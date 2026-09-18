@@ -1,15 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.apis.users.auth_service import AuthService
-from app.apis.users.exceptions import (InvalidActivationToken,
-                                       InvalidCredentials, InvalidResetToken,
-                                       UserAlreadyActive, UserAlreadyExists,
-                                       UserNameAlreadyExists)
-from app.apis.users.schema import (PaginatedUsersResponse,
-                                   PasswordResetConfirm, PasswordResetRequest,
-                                   ResendActivationResponse,
-                                   UserActivationRequest, UserBase,
-                                   UserRegisterResponse)
+from app.apis.users.exceptions import (
+    InvalidActivationToken,
+    InvalidCredentials,
+    InvalidResetToken,
+    UserAlreadyActive,
+    UserAlreadyExists,
+    UserNameAlreadyExists,
+)
+from app.apis.users.schema import (
+    PaginatedUsersResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    ResendActivationResponse,
+    UserActivationRequest,
+    UserBase,
+    UserRegisterResponse,
+)
 from app.apis.users.user_service import UserService
 from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import DBManager, get_db

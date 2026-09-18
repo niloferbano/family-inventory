@@ -8,8 +8,11 @@ from sqlalchemy import select
 from app.apis.notifications.models import NotificationOutbox
 from app.apis.users.exceptions import InvalidActivationToken
 from app.apis.users.models import User
-from app.apis.users.schema import (ResendActivationResponse,
-                                   UserActivationRequest, UserBase)
+from app.apis.users.schema import (
+    ResendActivationResponse,
+    UserActivationRequest,
+    UserBase,
+)
 from app.apis.users.user_service import UserService
 from app.core.configs.config import settings
 from app.iam.token_service import TokenService

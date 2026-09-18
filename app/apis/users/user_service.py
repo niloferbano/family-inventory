@@ -10,15 +10,21 @@ from sqlalchemy.exc import IntegrityError
 
 from app.apis.notifications.models import NotificationOutbox
 from app.apis.notifications.repository import NotificationOutboxRepository
-from app.apis.users.exceptions import (InvalidActivationToken,
-                                       UserAlreadyActive,
-                                       UserNameAlreadyExists)
+from app.apis.users.exceptions import (
+    InvalidActivationToken,
+    UserAlreadyActive,
+    UserNameAlreadyExists,
+)
 from app.apis.users.models import User as UserModel
 from app.apis.users.repository import UserRepository
-from app.apis.users.schema import (GetUserResponse, PaginatedUsersResponse,
-                                   ResendActivationResponse,
-                                   UserActivationRequest, UserBase,
-                                   UserRegisterResponse)
+from app.apis.users.schema import (
+    GetUserResponse,
+    PaginatedUsersResponse,
+    ResendActivationResponse,
+    UserActivationRequest,
+    UserBase,
+    UserRegisterResponse,
+)
 from app.core.configs.config import settings
 from app.core.database.pagination import Page, apply_pagination
 from app.core.logging import get_logger

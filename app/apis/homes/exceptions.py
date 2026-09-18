@@ -1,6 +1,5 @@
 from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import (DomainConflictError,
-                                          DomainNotFoundError)
+from app.core.database.exceptions import DomainConflictError, DomainNotFoundError
 
 
 class HomeAlreadyExists(DomainConflictError):

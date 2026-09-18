@@ -1,7 +1,9 @@
 from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import (DomainConflictError,
-                                          DomainNotFoundError,
-                                          DomainPermissionError)
+from app.core.database.exceptions import (
+    DomainConflictError,
+    DomainNotFoundError,
+    DomainPermissionError,
+)
 
 
 class InventoryItemNameConflict(DomainConflictError):

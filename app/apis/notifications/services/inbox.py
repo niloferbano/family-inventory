@@ -3,8 +3,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 
-from app.apis.notifications.services.realtime import \
-    NotificationRealtimeService
+from app.apis.notifications.services.realtime import NotificationRealtimeService
 
 try:
     from redis.asyncio import Redis  # redis-py >= 4

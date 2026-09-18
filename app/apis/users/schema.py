@@ -2,8 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from passlib.context import CryptContext
-from pydantic import (EmailStr, Field, SecretStr, ValidationInfo,
-                      field_validator)
+from pydantic import EmailStr, Field, SecretStr, ValidationInfo, field_validator
 
 from app.iam.types import HashedString
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput

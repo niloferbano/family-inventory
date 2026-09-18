@@ -5,8 +5,7 @@ from datetime import date
 from app.apis.inventory.repository import InventoryRepository
 from app.apis.inventory.services.expiry_service import InventoryExpiryService
 from app.apis.inventory.types import InventoryAlertType
-from app.apis.notifications.brokers import (EventBroker, LogBroker,
-                                            RabbitMQBroker)
+from app.apis.notifications.brokers import EventBroker, LogBroker, RabbitMQBroker
 from app.core.configs.config import settings
 from app.core.database.base import InventoryExpiryAlertId
 from app.core.database.session import get_db
