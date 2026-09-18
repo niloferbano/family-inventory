@@ -35,7 +35,10 @@ class HouseholdCategoryRepository:
         if created_id is None:
             raise HouseholdCategoryNameConflict(category.name)
         await self.session.flush()
-        return await self.get_by_id(created_id)
+        created_category = await self.get_by_id(created_id)
+        if created_category is None:
+            raise RuntimeError("Created household category could not be loaded")
+        return created_category
 
     async def get_by_id(
         self, category_id: HouseholdCategoryId
