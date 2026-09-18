@@ -31,3 +31,13 @@ class InventoryItemNotFound(DomainNotFoundError):
             message="Inventory item not found.",
             details={"item_id": item_id},
         )
+
+
+class InventoryCategoryInvalid(DomainConflictError):
+    status_code = 422
+
+    def __init__(self):
+        super().__init__(
+            code=ErrorCode.INVENTORY_CATEGORY_INVALID,
+            message="Select a category belonging to this home.",
+        )

@@ -364,3 +364,59 @@ async def test_owner_can_delete_item(client, db_session, auth_headers):
         select(InventoryItem.id).where(InventoryItem.id == item.id)
     )
     assert exists.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_category_choices_and_cross_home_validation(
+    client, db_session, auth_headers
+):
+    from uuid import uuid4
+
+    home = Home(name="Allowed")
+    other = Home(name="Other")
+    db_session.add_all([home, other])
+    await db_session.flush()
+    user_id = await _get_auth_user_id(db_session)
+    db_session.add(HomeUser(user_id=user_id, home_id=home.id, user_type=UserType.OWNER))
+    own = await _add_category(db_session, home.id, "Kitchen")
+    foreign = await _add_category(db_session, other.id, "Private category")
+    await db_session.commit()
+
+    choices = await client.get(f"/inventory/{home.id}/categories", headers=auth_headers)
+    assert choices.status_code == 200
+    assert [(c["id"], c["name"]) for c in choices.json()] == [(str(own.id), "Kitchen")]
+    denied = await client.get(f"/inventory/{other.id}/categories", headers=auth_headers)
+    assert denied.status_code == 403
+
+    for invalid in (foreign.id, uuid4()):
+        response = await client.post(
+            f"/inventory/{home.id}",
+            headers=auth_headers,
+            json=[
+                {"name": "Valid", "household_category_id": str(own.id)},
+                {"name": "Invalid", "household_category_id": str(invalid)},
+            ],
+        )
+        assert response.status_code == 422
+    assert (
+        await db_session.scalars(
+            select(InventoryItem).where(InventoryItem.home_id == home.id)
+        )
+    ).all() == []
+
+    response = await client.post(
+        f"/inventory/{home.id}",
+        headers=auth_headers,
+        json=[
+            {"name": "Valid", "household_category_id": str(own.id)},
+        ],
+    )
+    assert response.status_code == 200
+    item_id = response.json()[0]["id"]
+    for invalid in (str(foreign.id), None):
+        response = await client.patch(
+            f"/inventory/{home.id}/{item_id}",
+            headers=auth_headers,
+            json={"household_category_id": invalid},
+        )
+        assert response.status_code == 422

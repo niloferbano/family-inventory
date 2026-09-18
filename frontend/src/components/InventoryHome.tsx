@@ -14,7 +14,8 @@ import {
   UserType,
 } from "../api/homes";
 import {
-  InventoryCategory,
+  HouseholdCategory,
+  listInventoryCategories,
   InventoryItem,
   deleteInventoryItem,
   listInventoryItems,
@@ -31,13 +32,6 @@ const isUnauthorized = (err: unknown) => {
   );
 };
 
-const CATEGORY_OPTIONS: Array<{ value: InventoryCategory; label: string }> = [
-  { value: "kitchen", label: "Kitchen" },
-  { value: "bathroom", label: "Bathroom" },
-  { value: "cleaning", label: "Cleaning" },
-  { value: "other", label: "Other" },
-];
-
 const MEMBER_ROLE_OPTIONS: Array<{ value: UserType; label: string }> = [
   { value: "residence", label: "Resident" },
   { value: "guest", label: "Guest" },
@@ -46,6 +40,17 @@ const MEMBER_ROLE_OPTIONS: Array<{ value: UserType; label: string }> = [
 export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   const [homes, setHomes] = useState<HomeSummary[]>([]);
   const [homeId, setHomeId] = useState("");
+  const [categories, setCategories] = useState<HouseholdCategory[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    setCategories([]);
+    if (homeId) listInventoryCategories(homeId).then(data => {
+      if (!cancelled) setCategories(data);
+    }).catch(() => { if (!cancelled) setError("Unable to load categories."); });
+    return () => { cancelled = true; };
+  }, [homeId]);
+  const categoryName = (id: string) => categories.find(c => c.id === id)?.name ?? "Category unavailable";
+  const CATEGORY_OPTIONS = categories.map(c => ({ value: c.id, label: c.name }));
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loadingHomes, setLoadingHomes] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -78,7 +83,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({
     name: "",
-    category: "kitchen" as InventoryCategory,
+    household_category_id: "",
     quantity: 1,
     unit: "pcs",
     expiryDate: "",
@@ -190,7 +195,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     setEditingItemId(item.id);
     setEditValues({
       name: item.name,
-      category: item.category,
+      household_category_id: item.household_category_id,
       quantity: item.quantity,
       unit: item.unit,
       expiryDate: item.expiry_date ?? "",
@@ -216,7 +221,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     try {
       const updated = await updateInventoryItem(homeId, editingItemId, {
         name: trimmedName,
-        category: editValues.category,
+        household_category_id: editValues.household_category_id,
         quantity: editValues.quantity,
         unit: editValues.unit,
         expiry_date: editValues.expiryDate ? editValues.expiryDate : null,
@@ -332,7 +337,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
   // Sorting Logic
   const sortedItems = [...items].sort((a, b) => {
     if (sortBy === "category") {
-      return (a.category || "").localeCompare(b.category || "");
+      return categoryName(a.household_category_id).localeCompare(categoryName(b.household_category_id));
     } else if (sortBy === "expiry") {
       if (!a.expiry_date) return 1;
       if (!b.expiry_date) return -1;
@@ -1029,11 +1034,11 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
                           >
                             Category
                             <select
-                              value={editValues.category}
+                              value={editValues.household_category_id}
                               onChange={(e) =>
                                 setEditValues((prev) => ({
                                   ...prev,
-                                  category: e.target.value as InventoryCategory,
+                                  household_category_id: e.target.value,
                                 }))
                               }
                               style={{
@@ -1186,7 +1191,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
                               textTransform: "uppercase",
                             }}
                           >
-                            {item.category}
+                            {categoryName(item.household_category_id)}
                           </span>
                         </div>
 

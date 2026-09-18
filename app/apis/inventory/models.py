@@ -38,7 +38,9 @@ class InventoryItem(SQLBase, TimeStampMixin):
     # is a shared/global catalog — deleting one must not silently orphan or
     # cascade-wipe another home's inventory history.
     product_id: Mapped[ProductId | None] = mapped_column(
-        ForeignKey("inventory_products.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("inventory_products.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,  # supports "which homes stock this product" lookups
     )
     product: Mapped[Product | None] = relationship("Product", lazy="selectin")
 

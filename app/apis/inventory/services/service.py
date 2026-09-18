@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.apis.homes.exceptions import HomeNotFound
 from app.apis.homes.repository import HomeRepository
 from app.apis.homeuser.repository import HomeUserRepository
+from app.apis.household_categories.repository import HouseholdCategoryRepository
 from app.apis.inventory.exceptions import (
     InventoryAccessDenied,
+    InventoryCategoryInvalid,
     InventoryItemNameConflict,
     InventoryItemNotFound,
 )
@@ -56,6 +58,13 @@ class InventoryService:
 
         if not (self.current_user.is_admin or is_owner):
             raise InventoryAccessDenied(home_id=str(home_id))
+
+        categories = await HouseholdCategoryRepository(self.session).list_by_home(
+            home_id
+        )
+        allowed = {category.id for category in categories}
+        if any(item.household_category_id not in allowed for item in items):
+            raise InventoryCategoryInvalid()
 
         models = [
             InventoryItem(
@@ -140,6 +149,14 @@ class InventoryService:
             raise InventoryAccessDenied(home_id=str(home_id))
 
         updates = payload.model_dump(exclude_unset=True)
+        if "household_category_id" in updates:
+            categories = await HouseholdCategoryRepository(self.session).list_by_home(
+                home_id
+            )
+            if updates["household_category_id"] not in {
+                category.id for category in categories
+            }:
+                raise InventoryCategoryInvalid()
         if not updates:
             return item
 
