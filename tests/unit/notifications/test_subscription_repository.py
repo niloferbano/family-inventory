@@ -2,8 +2,7 @@ import pytest
 
 from app.apis.homes.models import Home
 from app.apis.notifications.models import NotificationSubscription
-from app.apis.notifications.repository import \
-    NotificationSubscriptionRepository
+from app.apis.notifications.repository import NotificationSubscriptionRepository
 from app.apis.notifications.types import NotificationChannel
 from app.apis.users.models import User
 

@@ -1,7 +1,6 @@
 import math
 from enum import StrEnum, auto
-from typing import (Annotated, Any, Generic, Literal, Protocol, TypeAlias,
-                    TypeVar)
+from typing import Annotated, Any, Generic, Literal, Protocol, TypeAlias, TypeVar
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import annotated_types

@@ -6,8 +6,12 @@ from typing import AsyncGenerator, Type
 
 from fastapi import Depends
 from sqlalchemy import URL, text
-from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
-                                    async_sessionmaker, create_async_engine)
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.configs.config import settings

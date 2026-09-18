@@ -14,8 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.models import InAppNotification
-from app.apis.notifications.services.realtime import \
-    NotificationRealtimeService
+from app.apis.notifications.services.realtime import NotificationRealtimeService
 from app.apis.notifications.types import NotificationChannel
 from app.core.configs.config import settings
 from app.core.database.base import HomeId, NotificationEventId, UserId

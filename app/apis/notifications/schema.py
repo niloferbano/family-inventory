@@ -5,8 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.apis.notifications.types import (NotificationChannel,
-                                          NotificationSource)
+from app.apis.notifications.types import NotificationChannel, NotificationSource
 from app.core.database.base import HomeId, NotificationEventId, UserId
 from app.schemas_base.base import BaseApiSchema
 

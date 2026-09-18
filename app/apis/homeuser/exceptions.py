@@ -1,8 +1,10 @@
 from app.apis.homeuser.models import UserType
 from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import (DomainConflictError,
-                                          DomainNotFoundError,
-                                          DomainPermissionError)
+from app.core.database.exceptions import (
+    DomainConflictError,
+    DomainNotFoundError,
+    DomainPermissionError,
+)
 
 
 class AlreadyMemberException(DomainConflictError):

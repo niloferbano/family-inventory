@@ -94,8 +94,10 @@ class InventoryRepository:
                 ),
             ]
 
-        if filters.category:
-            where_clauses.append(InventoryItem.category.in_(filters.category))
+        if filters.household_category_id:
+            where_clauses.append(
+                InventoryItem.household_category_id.in_(filters.household_category_id)
+            )
 
         base_query = sa.select(InventoryItem).where(*where_clauses)
 

@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.core.database.exceptions import (DomainConflictError,
-                                          DomainNotFoundError,
-                                          DomainPermissionError)
+from app.core.database.exceptions import (
+    DomainConflictError,
+    DomainNotFoundError,
+    DomainPermissionError,
+)
 
 
 def register_exception_handlers(app: FastAPI) -> None:

@@ -12,14 +12,20 @@ from aio_pika import IncomingMessage
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.exceptions import UnprocessableMessageError
-from app.apis.notifications.services.realtime import \
-    NotificationRealtimeService
+from app.apis.notifications.services.realtime import NotificationRealtimeService
 from app.apis.notifications.types import NotificationChannel
-from app.apis.notifications.worker.channels import (ChannelSender, EmailSender,
-                                                    InAppSender, LogSender)
+from app.apis.notifications.worker.channels import (
+    ChannelSender,
+    EmailSender,
+    InAppSender,
+    LogSender,
+)
 from app.apis.notifications.worker.handlers import (
-    build_failure_results_for_claimed, finalize_delivery_results,
-    prepare_event_deliveries, send_claimed_deliveries)
+    build_failure_results_for_claimed,
+    finalize_delivery_results,
+    prepare_event_deliveries,
+    send_claimed_deliveries,
+)
 from app.core.database.session import session_scope
 from app.core.logging import get_logger
 from app.core.redis.client import redis_client

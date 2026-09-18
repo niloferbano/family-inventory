@@ -5,17 +5,20 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import (APIRouter, Depends, Query, WebSocket, WebSocketDisconnect,
-                     status)
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 
-from app.apis.notifications.schema import (InAppNotificationOut,
-                                           SubscriptionCreateRequest,
-                                           SubscriptionOut, SubscriptionUpdate)
+from app.apis.notifications.schema import (
+    InAppNotificationOut,
+    SubscriptionCreateRequest,
+    SubscriptionOut,
+    SubscriptionUpdate,
+)
 from app.apis.notifications.services.inbox import NotificationInboxService
-from app.apis.notifications.services.subscription import \
-    NotificationSubscriptionsService
+from app.apis.notifications.services.subscription import (
+    NotificationSubscriptionsService,
+)
 from app.apis.users.models import User
 from app.core.database.base import HomeId
 from app.core.database.session import get_db

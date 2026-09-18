@@ -10,15 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.apis.homeuser.repository import HomeUserRepository
 from app.apis.notifications.models import NotificationSubscription
-from app.apis.notifications.repository import \
-    NotificationSubscriptionRepository
-from app.apis.notifications.schema import (SubscriptionCreateRequest,
-                                           SubscriptionUpdate)
+from app.apis.notifications.repository import NotificationSubscriptionRepository
+from app.apis.notifications.schema import SubscriptionCreateRequest, SubscriptionUpdate
 from app.core.database.base import HomeId, UserId
 from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import (DomainConflictError,
-                                          DomainNotFoundError,
-                                          DomainPermissionError)
+from app.core.database.exceptions import (
+    DomainConflictError,
+    DomainNotFoundError,
+    DomainPermissionError,
+)
 
 
 class NotificationSubscriptionsService:

@@ -1,19 +1,45 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.apis.errors.errors import ErrorResponse
-from app.apis.inventory.schema import (ExpiryFilter, InventoryCreateRequest,
-                                       InventoryCreateResponse,
-                                       InventoryFilters, InventoryGetResponse,
-                                       InventoryUpdateRequest,
-                                       PaginatedInventoryItemResponse)
+from app.apis.homeuser.repository import HomeUserRepository
+from app.apis.household_categories.repository import HouseholdCategoryRepository
+from app.apis.household_categories.schemas import HouseholdCategoryRead
+from app.apis.inventory.exceptions import InventoryAccessDenied
+from app.apis.inventory.schema import (
+    ExpiryFilter,
+    InventoryCreateRequest,
+    InventoryCreateResponse,
+    InventoryFilters,
+    InventoryGetResponse,
+    InventoryUpdateRequest,
+    PaginatedInventoryItemResponse,
+)
 from app.apis.inventory.services.service import InventoryService
-from app.apis.inventory.types import InventoryCategory
 from app.core.database.base import HomeId, InventoryId
 from app.core.database.pagination import PaginationParams, get_pagination
 from app.core.database.session import get_db
 from app.iam.dependencies import get_current_user
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
+
+
+@router.get("/{home_id}/categories", response_model=list[HouseholdCategoryRead])
+async def list_inventory_categories(
+    home_id: HomeId,
+    db_manager=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    async with db_manager.begin() as session:
+        if not (
+            current_user.is_admin
+            or await HomeUserRepository(session).user_has_access(
+                user_id=current_user.id, home_id=home_id
+            )
+        ):
+            raise InventoryAccessDenied(home_id=str(home_id))
+        return await HouseholdCategoryRepository(session).list_by_home(home_id)
 
 
 @router.post("/{home_id}", response_model=list[InventoryCreateResponse])
@@ -43,7 +69,7 @@ async def list_inventory_items(
     pagination_params: PaginationParams = Depends(),
     expiry: ExpiryFilter | None = Query(default=None),
     days: int = Query(default=7, ge=1, le=365),
-    category: list[InventoryCategory] | None = Query(default=None),
+    household_category_id: list[UUID] | None = Query(default=None),
     db_manager=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -52,7 +78,7 @@ async def list_inventory_items(
         page_size=pagination_params.page_size,
     )
     filters = InventoryFilters(
-        category=category,
+        household_category_id=household_category_id,
         expiry=expiry,
         days=days,
     )

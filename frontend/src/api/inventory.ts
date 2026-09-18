@@ -1,10 +1,18 @@
 import { API_BASE, getToken } from "./auth";
 
-export type InventoryCategory = "kitchen" | "bathroom" | "cleaning" | "other";
+export interface HouseholdCategory { id: string; name: string; home_id: string; }
+
+export async function listInventoryCategories(homeId: string): Promise<HouseholdCategory[]> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/inventory/${homeId}/categories`, {
+    headers: { ...(token ? { Authorization: `bearer ${token}` } : {}) },
+  });
+  return handleResponse<HouseholdCategory[]>(response);
+}
 
 export interface InventoryCreateRequest {
   name: string;
-  category: InventoryCategory;
+  household_category_id: string;
   quantity: number;
   unit: string;
   expiry_date?: string; // ISO date yyyy-mm-dd
@@ -14,7 +22,7 @@ export interface InventoryCreateRequest {
 export interface InventoryItem {
   id: string;
   name: string;
-  category: InventoryCategory;
+  household_category_id: string;
   quantity: number;
   unit: string;
   expiry_date?: string;
@@ -24,7 +32,7 @@ export interface InventoryItem {
 
 export interface InventoryUpdateRequest {
   name?: string;
-  category?: InventoryCategory;
+  household_category_id?: string;
   quantity?: number;
   unit?: string;
   expiry_date?: string | null;

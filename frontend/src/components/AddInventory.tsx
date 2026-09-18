@@ -1,17 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   createInventoryItem,
-  InventoryCategory,
+  HouseholdCategory,
+  listInventoryCategories,
   InventoryCreateRequest,
 } from "../api/inventory";
 import { clearToken } from "../api/auth";
-
-const CATEGORY_OPTIONS: Array<{ value: InventoryCategory; label: string }> = [
-  { value: "kitchen", label: "Kitchen" },
-  { value: "bathroom", label: "Bathroom" },
-  { value: "cleaning", label: "Cleaning" },
-  { value: "other", label: "Other" },
-];
 
 export default function AddInventory({
   homeId,
@@ -28,14 +22,30 @@ export default function AddInventory({
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState("pcs");
   const [expiryDate, setExpiryDate] = useState("");
-  const [category, setCategory] = useState<InventoryCategory>("kitchen");
+  const [category, setCategory] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [categories, setCategories] = useState<HouseholdCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setCategories([]);
+    setCategory("");
+    setCategoriesLoading(true);
+    listInventoryCategories(homeId).then((data) => {
+      if (!cancelled) setCategories(data);
+    }).catch(() => {
+      if (!cancelled) setError("Unable to load categories. Reopen the form to retry.");
+    }).finally(() => { if (!cancelled) setCategoriesLoading(false); });
+    return () => { cancelled = true; };
+  }, [homeId]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading || categoriesLoading || !categories.some(c => c.id === category)) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -48,7 +58,7 @@ export default function AddInventory({
 
     const payload: InventoryCreateRequest = {
       name,
-      category,
+      household_category_id: category,
       quantity,
       unit,
       expiry_date: expiryDate || undefined,
@@ -62,7 +72,7 @@ export default function AddInventory({
       setQuantity(1);
       setUnit("pcs");
       setExpiryDate("");
-      setCategory("kitchen");
+      setCategory("");
       setNotes("");
 
       onCreated?.();
@@ -160,8 +170,10 @@ export default function AddInventory({
               Category
             </label>
             <select
+              required
+              disabled={categoriesLoading || loading || !categories.length}
               value={category}
-              onChange={(e) => setCategory(e.target.value as InventoryCategory)}
+              onChange={(e) => setCategory(e.target.value)}
               style={{
                 width: "100%",
                 padding: 8,
@@ -170,9 +182,10 @@ export default function AddInventory({
                 background: "white",
               }}
             >
-              {CATEGORY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              <option value="">{categoriesLoading ? "Loading categories…" : categories.length ? "Select a category" : "No categories available for this home"}</option>
+              {categories.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
                 </option>
               ))}
             </select>
@@ -285,7 +298,7 @@ export default function AddInventory({
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || categoriesLoading || !category}
             style={{
               flex: 2,
               background: "#2563eb",

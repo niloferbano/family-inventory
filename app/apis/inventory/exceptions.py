@@ -1,7 +1,9 @@
 from app.core.database.error_codes import ErrorCode
-from app.core.database.exceptions import (DomainConflictError,
-                                          DomainNotFoundError,
-                                          DomainPermissionError)
+from app.core.database.exceptions import (
+    DomainConflictError,
+    DomainNotFoundError,
+    DomainPermissionError,
+)
 
 
 class InventoryItemNameConflict(DomainConflictError):
@@ -28,4 +30,14 @@ class InventoryItemNotFound(DomainNotFoundError):
             code=ErrorCode.INVENTORY_ITEM_NOT_FOUND,
             message="Inventory item not found.",
             details={"item_id": item_id},
+        )
+
+
+class InventoryCategoryInvalid(DomainConflictError):
+    status_code = 422
+
+    def __init__(self):
+        super().__init__(
+            code=ErrorCode.INVENTORY_CATEGORY_INVALID,
+            message="Select a category belonging to this home.",
         )

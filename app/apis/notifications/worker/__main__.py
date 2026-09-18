@@ -7,8 +7,7 @@ import signal
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.apis.notifications.brokers import RabbitMQBroker
-from app.apis.notifications.worker.consumer import (NotificationWorker,
-                                                    WorkerConfig)
+from app.apis.notifications.worker.consumer import NotificationWorker, WorkerConfig
 from app.apis.notifications.worker.sweeper import run_sweeper_loop
 from app.core.configs.config import settings
 from app.core.database.session import get_db

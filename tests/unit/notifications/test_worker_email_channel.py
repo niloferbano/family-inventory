@@ -2,10 +2,15 @@ from uuid import uuid4
 
 import pytest
 
-from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
-                                          NotificationRecipientType)
-from app.apis.notifications.worker.handlers import (ClaimedDelivery,
-                                                    send_claimed_deliveries)
+from app.apis.notifications.types import (
+    DeliveryStatus,
+    NotificationChannel,
+    NotificationRecipientType,
+)
+from app.apis.notifications.worker.handlers import (
+    ClaimedDelivery,
+    send_claimed_deliveries,
+)
 
 
 class RecordingEmailSender:

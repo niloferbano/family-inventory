@@ -4,14 +4,22 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Date, DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import (ForeignKey, Index, Integer, String, Text,
-                        UniqueConstraint)
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.apis.inventory.types import InventoryAlertType, InventoryCategory
-from app.core.database.base import (HomeId, InventoryId, SQLBase,
-                                    TimeStampMixin, UserId)
+from app.apis.household_categories.models import HouseholdCategory
+from app.apis.inventory.types import InventoryAlertType
+from app.apis.product.models import Product
+from app.core.database.base import (
+    HomeId,
+    HouseholdCategoryId,
+    InventoryId,
+    ProductId,
+    SQLBase,
+    TimeStampMixin,
+    UserId,
+)
 
 
 class InventoryItem(SQLBase, TimeStampMixin):
@@ -25,17 +33,35 @@ class InventoryItem(SQLBase, TimeStampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    category: Mapped[InventoryCategory] = mapped_column(
-        SAEnum(
-            InventoryCategory,
-            name="inventory_category_enum",
-            values_callable=lambda enum: [e.value for e in enum],
-            create_constraint=True,
-            native_enum=True,
-        ),
+    # Nullable during the Product/StockBatch rollout (issue #40/#43):
+    # existing rows have no product yet. ON DELETE RESTRICT because Product
+    # is a shared/global catalog — deleting one must not silently orphan or
+    # cascade-wipe another home's inventory history.
+    product_id: Mapped[ProductId | None] = mapped_column(
+        ForeignKey("inventory_products.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,  # supports "which homes stock this product" lookups
+    )
+    product: Mapped[Product | None] = relationship("Product", lazy="selectin")
+
+    # Additive, same pattern as product_id: category (the fixed enum) stays
+    # for backward compatibility. ON DELETE SET NULL (not RESTRICT) because
+    # a HouseholdCategory is one home's own label — deleting it should just
+    # uncategorize the item, not block the delete or affect other homes.
+    # Now the single source of truth for an item's category (issue #43
+    # follow-up): the old fixed InventoryCategory enum is gone. RESTRICT
+    # because the column is required -- a category in use can't be deleted
+    # out from under items that reference it.
+    household_category_id: Mapped[HouseholdCategoryId] = mapped_column(
+        ForeignKey("household_categories.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    household_category: Mapped[HouseholdCategory] = relationship(
+        "HouseholdCategory",
+        lazy="selectin",
+    )
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit: Mapped[str] = mapped_column(String(30), default="pcs")
 
@@ -54,9 +80,9 @@ class InventoryItem(SQLBase, TimeStampMixin):
             "created_at",
         ),
         Index(
-            "ix_inventory_home_category",
+            "ix_inventory_home_household_category",
             "home_id",
-            "category",
+            "household_category_id",
         ),
         Index(
             "ix_inventory_home_expiry",

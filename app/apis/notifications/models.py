@@ -8,13 +8,15 @@ from uuid import uuid4
 import sqlalchemy as sa
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import (ForeignKey, Index, Integer, String, Text,
-                        UniqueConstraint)
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.apis.notifications.types import (DeliveryStatus, NotificationChannel,
-                                          NotificationRecipientType)
+from app.apis.notifications.types import (
+    DeliveryStatus,
+    NotificationChannel,
+    NotificationRecipientType,
+)
 from app.core.database.base import NotificationEventId, SQLBase, TimeStampMixin
 
 # Reuse enum types across models so SQLAlchemy doesn't create multiple objects
