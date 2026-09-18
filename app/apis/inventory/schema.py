@@ -2,7 +2,7 @@ from datetime import date
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AliasPath, BaseModel, Field, model_validator
 
 from app.core.database.base import HomeId
 from app.schemas_base.base import BaseApiSchema, PaginatedOutput
@@ -27,6 +27,7 @@ class InventoryUpdateRequest(BaseModel):
 
 
 class InventoryCreateResponse(BaseApiSchema):
+    name: str = Field(validation_alias=AliasPath("product", "name"))
     id: UUID
     product_id: UUID
     household_category_id: UUID
@@ -38,6 +39,7 @@ class InventoryCreateResponse(BaseApiSchema):
 
 
 class InventoryGetResponse(BaseApiSchema):
+    name: str = Field(validation_alias=AliasPath("product", "name"))
     id: UUID
     product_id: UUID
     household_category_id: UUID

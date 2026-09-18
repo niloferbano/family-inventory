@@ -12,6 +12,7 @@ from app.apis.homeuser.router import router as home_user_router
 from app.apis.inventory.router import router as inventory_router
 from app.apis.notifications.brokers import RabbitMQBroker
 from app.apis.notifications.router import router as notification_router
+from app.apis.product.router import router as products_router
 from app.apis.users.router import router as users_router
 from app.core.configs.config import settings
 from app.core.exception_handlers import register_exception_handlers
@@ -93,6 +94,7 @@ app.add_middleware(
 )
 API_PREFIX = "/api/v1"
 app.include_router(router=users_router, prefix=API_PREFIX)
+app.include_router(router=products_router, prefix=API_PREFIX)
 app.include_router(router=homes_router, prefix=API_PREFIX)
 app.include_router(router=home_user_router, prefix=API_PREFIX)
 app.include_router(router=inventory_router, prefix=API_PREFIX)
