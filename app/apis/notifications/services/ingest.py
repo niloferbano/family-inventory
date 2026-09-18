@@ -123,7 +123,7 @@ class NotificationIngestService:
 
     async def handle_account_email_event(self, *, topic: str, payload: dict) -> None:
         event_id = UUID(payload["event_id"])
-        user = await self.user_repo.get_by_id(UUID(payload["user_id"]))
+        user = await self.user_repo.get_by_id(UserId(UUID(payload["user_id"])))
         if user is None:
             raise ValueError("Account email user does not exist")
         await self.event_repo.create_if_missing(

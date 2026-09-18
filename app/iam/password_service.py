@@ -5,8 +5,8 @@ from app.iam.types import HashedString
 
 class PasswordService:
     @staticmethod
-    def hash(password: str) -> str:
-        return _hash(password)
+    def hash(password: str) -> HashedString:
+        return HashedString(_hash(password))
 
     @staticmethod
     def verify(password: str, hashed_password: HashedString) -> bool:

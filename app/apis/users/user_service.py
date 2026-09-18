@@ -104,7 +104,9 @@ class UserService:
     async def validate_activation_link(self, key: str) -> None:
         input_hash = hashlib.sha256(str(key).encode()).hexdigest()
         try:
-            raw_user_data = await TokenService.verify_activation_token(token=key)
+            raw_user_data = await TokenService.verify_activation_token(
+                token=ActivationKey(key)
+            )
         except ValueError:
             raw_user_data = None
         if not raw_user_data:
