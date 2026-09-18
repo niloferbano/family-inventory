@@ -308,3 +308,10 @@ docker build -f deploy/frontend.Dockerfile -t family-inventory-web:local .
 For another host, transfer these images with `docker save` / `docker load`, or pull and tag your registry images before deployment. Test Compose continues to build its isolated test image.
 
 See [the deployment guide](docs/deployment.md) for environment setup, updates, and database recovery.
+
+### Local commit checks
+
+Run `make install-hooks` once after cloning to enable the versioned Git hooks.
+Each commit runs `poetry run mypy .` and stops if type checking fails. Install the
+project dependencies with Poetry first. This checks the working tree, including
+unstaged changes; CI also runs mypy independently.

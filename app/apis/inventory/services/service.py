@@ -27,7 +27,7 @@ from app.apis.inventory.schema import (
 )
 from app.apis.product.exceptions import ProductNotFound
 from app.apis.product.repository import ProductRepository
-from app.core.database.base import HomeId, InventoryId
+from app.core.database.base import HomeId, InventoryId, ProductId
 from app.core.database.pagination import Page, update_pagination
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ class InventoryService:
             raise InventoryCategoryInvalid()
 
         products = await ProductRepository(self.session).get_many(
-            {item.product_id for item in items}
+            {ProductId(item.product_id) for item in items}
         )
         valid_product_ids = {product.id for product in products}
         for item in items:

@@ -453,8 +453,14 @@ async def test_category_choices_and_cross_home_validation(
             f"/inventory/{home.id}",
             headers=auth_headers,
             json=[
-                {"product_id": str(valid_product.id), "household_category_id": str(own.id)},
-                {"product_id": str(invalid_product.id), "household_category_id": str(invalid)},
+                {
+                    "product_id": str(valid_product.id),
+                    "household_category_id": str(own.id),
+                },
+                {
+                    "product_id": str(invalid_product.id),
+                    "household_category_id": str(invalid),
+                },
             ],
         )
         assert response.status_code == 422
@@ -545,7 +551,10 @@ async def test_category_deletion_races_inventory_write(
             f"/inventory/{home.id}",
             headers=auth_headers,
             json=[
-                {"product_id": str(new_product_id), "household_category_id": str(target_id)},
+                {
+                    "product_id": str(new_product_id),
+                    "household_category_id": str(target_id),
+                },
             ],
         )
     else:
