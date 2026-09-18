@@ -420,3 +420,91 @@ async def test_category_choices_and_cross_home_validation(
             json={"household_category_id": invalid},
         )
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["create", "update"])
+@pytest.mark.parametrize("delete_first", [False, True])
+async def test_category_deletion_races_inventory_write(
+    client, db_session, mock_db, auth_headers, monkeypatch, operation, delete_first
+):
+    from sqlalchemy import delete, text
+    from sqlalchemy.exc import DBAPIError, IntegrityError
+
+    from app.apis.household_categories.repository import HouseholdCategoryRepository
+
+    home = Home(name="Category race")
+    db_session.add(home)
+    await db_session.flush()
+    user_id = await _get_auth_user_id(db_session)
+    db_session.add(HomeUser(user_id=user_id, home_id=home.id, user_type=UserType.OWNER))
+    original = await _add_category(db_session, home.id, "Original")
+    target = await _add_category(db_session, home.id, "Target")
+    item = InventoryItem(
+        home_id=home.id, name="Existing", household_category_id=original.id
+    )
+    db_session.add(item)
+    await db_session.commit()
+    target_id = target.id
+    original_id = original.id
+    item_id = item.id
+    lock = HouseholdCategoryRepository.lock_for_inventory
+    deletion_attempted = False
+
+    async def delete_target():
+        async with mock_db.begin() as session:
+            await session.execute(text("SET LOCAL lock_timeout = '200ms'"))
+            await session.execute(
+                delete(HouseholdCategory).where(HouseholdCategory.id == target_id)
+            )
+
+    async def racing_lock(repo, home_id, category_ids):
+        nonlocal deletion_attempted
+        if delete_first:
+            # Delete commits while the inventory request is in progress,
+            # before the category validation query acquires its lock.
+            await delete_target()
+        categories = await lock(repo, home_id, category_ids)
+        if not delete_first:
+            # A second real transaction attempts deletion in the gap between
+            # category validation and inventory insertion/update.
+            with pytest.raises(DBAPIError) as exc:
+                await delete_target()
+            assert getattr(exc.value.orig, "sqlstate", None) == "55P03"
+        deletion_attempted = True
+        return categories
+
+    monkeypatch.setattr(HouseholdCategoryRepository, "lock_for_inventory", racing_lock)
+    if operation == "create":
+        response = await client.post(
+            f"/inventory/{home.id}",
+            headers=auth_headers,
+            json=[
+                {"name": "New", "household_category_id": str(target_id)},
+            ],
+        )
+    else:
+        response = await client.patch(
+            f"/inventory/{home.id}/{item_id}",
+            headers=auth_headers,
+            json={"household_category_id": str(target_id)},
+        )
+    assert deletion_attempted
+    assert response.status_code == (422 if delete_first else 200)
+    async with mock_db.begin() as session:
+        updated = await session.get(InventoryItem, item_id)
+        assert updated.household_category_id == (
+            target_id if operation == "update" and not delete_first else original_id
+        )
+        created = await session.scalar(
+            select(InventoryItem).where(
+                InventoryItem.home_id == home.id, InventoryItem.name == "New"
+            )
+        )
+        assert (created is not None) == (operation == "create" and not delete_first)
+    if not delete_first:
+        # Once the writer commits, the foreign key prevents deletion of the
+        # now-referenced category instead of merely waiting on its lock.
+        with pytest.raises(IntegrityError) as exc:
+            await delete_target()
+        assert getattr(exc.value.orig, "sqlstate", None) == "23503"

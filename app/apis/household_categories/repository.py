@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -47,6 +47,25 @@ class HouseholdCategoryRepository:
             sa.select(HouseholdCategory)
             .where(HouseholdCategory.home_id == home_id)
             .order_by(HouseholdCategory.name.asc())
+        )
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def lock_for_inventory(
+        self,
+        home_id: HomeId,
+        category_ids: set[UUID],
+    ) -> list[HouseholdCategory]:
+        """Keep selected categories alive until the inventory transaction ends."""
+        if not category_ids:
+            return []
+        stmt = (
+            sa.select(HouseholdCategory)
+            .where(
+                HouseholdCategory.home_id == home_id,
+                HouseholdCategory.id.in_(category_ids),
+            )
+            .order_by(HouseholdCategory.id)
+            .with_for_update(read=True, key_share=True)
         )
         return list((await self.session.execute(stmt)).scalars().all())
 

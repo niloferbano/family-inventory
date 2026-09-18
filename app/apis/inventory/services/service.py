@@ -59,8 +59,8 @@ class InventoryService:
         if not (self.current_user.is_admin or is_owner):
             raise InventoryAccessDenied(home_id=str(home_id))
 
-        categories = await HouseholdCategoryRepository(self.session).list_by_home(
-            home_id
+        categories = await HouseholdCategoryRepository(self.session).lock_for_inventory(
+            home_id, {item.household_category_id for item in items}
         )
         allowed = {category.id for category in categories}
         if any(item.household_category_id not in allowed for item in items):
@@ -82,6 +82,15 @@ class InventoryService:
         except IntegrityError as exc:
             # If you *continue using this session*, you must rollback.
             await self.session.rollback()
+
+            # Only the home+name uniqueness violation means "name conflict".
+            # household_category_id/product_id are pre-checked above, but a
+            # concurrent delete between that check and this insert raises an
+            # IntegrityError too (FK violation) -- don't mislabel that as a
+            # name conflict.
+            constraint_name = getattr(exc.orig, "constraint_name", None)
+            if constraint_name != "uq_inventory_home_name":
+                raise
 
             existing = await self.inventory_repo.get_existing_names(
                 home_id,
@@ -150,9 +159,11 @@ class InventoryService:
 
         updates = payload.model_dump(exclude_unset=True)
         if "household_category_id" in updates:
-            categories = await HouseholdCategoryRepository(self.session).list_by_home(
-                home_id
-            )
+            if updates["household_category_id"] is None:
+                raise InventoryCategoryInvalid()
+            categories = await HouseholdCategoryRepository(
+                self.session
+            ).lock_for_inventory(home_id, {updates["household_category_id"]})
             if updates["household_category_id"] not in {
                 category.id for category in categories
             }:
