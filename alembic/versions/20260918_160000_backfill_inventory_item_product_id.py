@@ -62,12 +62,10 @@ inventory_products = sa.table(
 
 
 def upgrade():
-    op.create_index(
-        op.f("ix_inventory_items_product_id"),
-        "inventory_items",
-        ["product_id"],
-        unique=False,
-    )
+    # NOTE: ix_inventory_items_product_id is created by 4304258471a2
+    # (the migration that first added this column) and never dropped in
+    # between -- this migration only backfills data, it does not touch
+    # that index.
     conn = op.get_bind()
 
     rows = conn.execute(
@@ -104,6 +102,4 @@ def downgrade():
     # Data-only backfill: reversing it would mean guessing which
     # product_id assignments predate this migration vs. were made by real
     # usage afterward. Not supported.
-    op.drop_index(op.f("ix_inventory_items_product_id"), table_name="inventory_items")
-
     raise RuntimeError("Downgrade not supported for inventory product_id backfill")

@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from app.apis.homes.models import Home
 from app.apis.household_categories.models import HouseholdCategory
 from app.apis.inventory.models import InventoryItem
+from app.apis.product.models import Product
 
 
 @pytest.mark.asyncio
@@ -14,7 +15,11 @@ async def test_household_category_is_required(mock_db):
             session.add(home)
             await session.flush()
 
-            item = InventoryItem(home_id=home.id, name="Milk")
+            product = Product(name="Milk")
+            session.add(product)
+            await session.flush()
+
+            item = InventoryItem(home_id=home.id, product_id=product.id)
             session.add(item)
             await session.flush()
 
@@ -30,9 +35,13 @@ async def test_item_links_to_household_category(mock_db):
         session.add(category)
         await session.flush()
 
+        product = Product(name="Soldering Iron")
+        session.add(product)
+        await session.flush()
+
         item = InventoryItem(
             home_id=home.id,
-            name="Soldering Iron",
+            product_id=product.id,
             household_category_id=category.id,
         )
         session.add(item)
@@ -57,9 +66,13 @@ async def test_deleting_referenced_household_category_is_blocked(mock_db):
         await session.flush()
         category_id = category.id
 
+        product = Product(name="Rake")
+        session.add(product)
+        await session.flush()
+
         item = InventoryItem(
             home_id=home.id,
-            name="Rake",
+            product_id=product.id,
             household_category_id=category_id,
         )
         session.add(item)

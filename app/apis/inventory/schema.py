@@ -9,7 +9,7 @@ from app.schemas_base.base import BaseApiSchema, PaginatedOutput
 
 
 class InventoryCreateRequest(BaseModel):
-    name: str
+    product_id: UUID
     household_category_id: UUID
     quantity: int = 1
     unit: str = "pcs"
@@ -18,7 +18,7 @@ class InventoryCreateRequest(BaseModel):
 
 
 class InventoryUpdateRequest(BaseModel):
-    name: str | None = None
+    product_id: UUID | None = None
     household_category_id: UUID | None = None
     quantity: int | None = None
     unit: str | None = None
@@ -28,7 +28,7 @@ class InventoryUpdateRequest(BaseModel):
 
 class InventoryCreateResponse(BaseApiSchema):
     id: UUID
-    name: str
+    product_id: UUID
     household_category_id: UUID
     quantity: int
     unit: str
@@ -39,7 +39,7 @@ class InventoryCreateResponse(BaseApiSchema):
 
 class InventoryGetResponse(BaseApiSchema):
     id: UUID
-    name: str
+    product_id: UUID
     household_category_id: UUID
     quantity: int
     unit: str

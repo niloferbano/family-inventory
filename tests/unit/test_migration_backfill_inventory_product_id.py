@@ -65,14 +65,19 @@ def test_backfill_creates_one_product_per_item_never_merging_on_name(monkeypatch
 
         home_a = uuid.uuid4()
         home_b = uuid.uuid4()
+        home_c = uuid.uuid4()
         category_a = uuid.uuid4()
         category_b = uuid.uuid4()
+        category_c = uuid.uuid4()
         preexisting_product_id = uuid.uuid4()  # catalog Product("Milk"), pre-existing
 
         item_a_milk = uuid.uuid4()  # home_a, name="Milk" -- name collides with...
         item_b_milk = uuid.uuid4()  # home_b, name="Milk" -- ...both this row...
         item_c_already_linked = uuid.uuid4()  # ...and this pre-existing Product,
-        # none of which should be merged together.
+        # none of which should be merged together. item_c lives in its own
+        # home_c -- (home_id, name) is still uniquely constrained at this
+        # revision (uq_inventory_home_name is only dropped by issue #48), so
+        # it can't share home_a's "Milk" row without a real collision.
 
         with engine.begin() as conn:
             conn.execute(text(f'SET search_path TO "{schema}", public'))
@@ -82,6 +87,7 @@ def test_backfill_creates_one_product_per_item_never_merging_on_name(monkeypatch
                 [
                     {"id": str(home_a), "name": "Backfill Home A"},
                     {"id": str(home_b), "name": "Backfill Home B"},
+                    {"id": str(home_c), "name": "Backfill Home C"},
                 ],
             )
             conn.execute(
@@ -92,6 +98,7 @@ def test_backfill_creates_one_product_per_item_never_merging_on_name(monkeypatch
                 [
                     {"id": str(category_a), "home_id": str(home_a), "name": "Kitchen"},
                     {"id": str(category_b), "home_id": str(home_b), "name": "Kitchen"},
+                    {"id": str(category_c), "home_id": str(home_c), "name": "Kitchen"},
                 ],
             )
             conn.execute(
@@ -128,8 +135,8 @@ def test_backfill_creates_one_product_per_item_never_merging_on_name(monkeypatch
                         # Already has a product_id -- must be left untouched,
                         # not re-pointed at a new or existing "Milk" product.
                         "id": str(item_c_already_linked),
-                        "home_id": str(home_a),
-                        "category_id": str(category_a),
+                        "home_id": str(home_c),
+                        "category_id": str(category_c),
                         "name": "Milk",
                         "product_id": str(preexisting_product_id),
                     },

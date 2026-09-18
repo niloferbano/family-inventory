@@ -13,7 +13,6 @@ from app.apis.household_categories.repository import HouseholdCategoryRepository
 from app.apis.inventory.exceptions import (
     InventoryAccessDenied,
     InventoryCategoryInvalid,
-    InventoryItemNameConflict,
     InventoryItemNotFound,
 )
 from app.apis.inventory.models import InventoryItem
@@ -26,6 +25,8 @@ from app.apis.inventory.schema import (
     InventoryUpdateRequest,
     PaginatedInventoryItemResponse,
 )
+from app.apis.product.exceptions import ProductNotFound
+from app.apis.product.repository import ProductRepository
 from app.core.database.base import HomeId, InventoryId
 from app.core.database.pagination import Page, update_pagination
 
@@ -66,6 +67,14 @@ class InventoryService:
         if any(item.household_category_id not in allowed for item in items):
             raise InventoryCategoryInvalid()
 
+        products = await ProductRepository(self.session).get_many(
+            {item.product_id for item in items}
+        )
+        valid_product_ids = {product.id for product in products}
+        for item in items:
+            if item.product_id not in valid_product_ids:
+                raise ProductNotFound(product_id=str(item.product_id))
+
         models = [
             InventoryItem(
                 home_id=home_id,
@@ -78,25 +87,12 @@ class InventoryService:
         try:
             created = await self.inventory_repo.add_items(home_id, models)
             return [InventoryCreateResponse.model_validate(i) for i in created]
-
-        except IntegrityError as exc:
-            # If you *continue using this session*, you must rollback.
+        except IntegrityError:
+            # household_category_id and product_id are both pre-checked above,
+            # but a concurrent delete between that check and this insert can
+            # still raise an IntegrityError (FK violation) here.
             await self.session.rollback()
-
-            # Only the home+name uniqueness violation means "name conflict".
-            # household_category_id/product_id are pre-checked above, but a
-            # concurrent delete between that check and this insert raises an
-            # IntegrityError too (FK violation) -- don't mislabel that as a
-            # name conflict.
-            constraint_name = getattr(exc.orig, "constraint_name", None)
-            if constraint_name != "uq_inventory_home_name":
-                raise
-
-            existing = await self.inventory_repo.get_existing_names(
-                home_id,
-                [i.name for i in models],
-            )
-            raise InventoryItemNameConflict(existing) from exc
+            raise
 
     async def get_items(
         self,
@@ -171,13 +167,12 @@ class InventoryService:
         if not updates:
             return item
 
-        if "name" in updates and updates["name"] != item.name:
-            if await self.inventory_repo.name_exists(
-                home_id=home_id,
-                name=updates["name"],
-                exclude_id=item_id,
-            ):
-                raise InventoryItemNameConflict([updates["name"]])
+        if "product_id" in updates:
+            product = await ProductRepository(self.session).get_by_id(
+                updates["product_id"]
+            )
+            if product is None:
+                raise ProductNotFound(product_id=str(updates["product_id"]))
 
         for field, value in updates.items():
             setattr(item, field, value)

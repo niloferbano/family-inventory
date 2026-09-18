@@ -7,7 +7,6 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.apis.inventory.exceptions import InventoryItemNameConflict
 from app.apis.inventory.models import InventoryExpiryAlert, InventoryItem
 from app.apis.inventory.schema import ExpiryFilter, InventoryFilters
 from app.apis.inventory.types import InventoryAlertType
@@ -28,45 +27,18 @@ class InventoryRepository:
     async def get_by_id(self, item_id: InventoryId) -> InventoryItem | None:
         return await self.session.get(InventoryItem, item_id)
 
-    async def name_exists(
-        self,
-        *,
-        home_id: HomeId,
-        name: str,
-        exclude_id: InventoryId | None = None,
-    ) -> bool:
-        stmt = sa.select(InventoryItem.id).where(
-            InventoryItem.home_id == home_id,
-            InventoryItem.name == name,
-        )
-        if exclude_id is not None:
-            stmt = stmt.where(InventoryItem.id != exclude_id)
-        return (await self.session.scalar(stmt)) is not None
-
     async def delete(self, item: InventoryItem) -> None:
         await self.session.delete(item)
 
     async def add_items(
         self, home_id: HomeId, items: list[InventoryItem]
     ) -> list[InventoryItem]:
-        names = [item.name for item in items]
-
-        existing = await self.session.execute(
-            sa.select(InventoryItem.name)
-            .where(InventoryItem.home_id == home_id)
-            .where(InventoryItem.name.in_(names))
-        )
-
-        existing_names = existing.scalars().all()
-
-        new_items = [i for i in items if i.name not in existing_names]
-
-        if not new_items:
-            raise InventoryItemNameConflict(list(existing_names))
-
-        self.session.add_all(new_items)
+        # No home+name uniqueness left to enforce (issue #48): multiple
+        # items -- in the same or different homes -- may reference the same
+        # Product.
+        self.session.add_all(items)
         await self.session.flush()
-        return new_items
+        return items
 
     async def get_by_home(
         self,
@@ -112,19 +84,6 @@ class InventoryRepository:
         rows = (await self.session.execute(rows_query)).scalars().all()
 
         return rows, total
-
-    async def get_existing_names(
-        self,
-        home_id: HomeId,
-        names: list[str],
-    ) -> list[str]:
-        result = await self.session.execute(
-            sa.select(InventoryItem.name).where(
-                InventoryItem.home_id == home_id,
-                InventoryItem.name.in_(names),
-            )
-        )
-        return list(result.scalars().all())
 
     async def register_expiry_alerts(
         self,
