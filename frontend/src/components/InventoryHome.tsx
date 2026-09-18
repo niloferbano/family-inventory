@@ -220,7 +220,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
     setError(null);
     try {
       const updated = await updateInventoryItem(homeId, editingItemId, {
-        name: trimmedName,
+
         household_category_id: editValues.household_category_id,
         quantity: editValues.quantity,
         unit: editValues.unit,
@@ -1008,6 +1008,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
                           Name
                           <input
                             value={editValues.name}
+                            readOnly
                             onChange={(e) =>
                               setEditValues((prev) => ({
                                 ...prev,

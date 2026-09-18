@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   createInventoryItem,
+  Product, searchProducts, createProduct,
   HouseholdCategory,
   listInventoryCategories,
   InventoryCreateRequest,
@@ -19,6 +20,18 @@ export default function AddInventory({
   onLogout: () => void;
 }) {
   const [name, setName] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    setProducts([]);
+    const timer = setTimeout(() => {
+      if (name.trim()) searchProducts(name.trim()).then(data => {
+        if (!cancelled) setProducts(data);
+      }).catch(() => { if (!cancelled) setError("Product search failed. Please try again."); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [name]);
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState("pcs");
   const [expiryDate, setExpiryDate] = useState("");
@@ -45,7 +58,7 @@ export default function AddInventory({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading || categoriesLoading || !categories.some(c => c.id === category)) return;
+    if (loading || categoriesLoading || !name.trim() || !categories.some(c => c.id === category)) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -56,8 +69,11 @@ export default function AddInventory({
       return;
     }
 
+    try {
+    const product = selectedProduct ?? await createProduct(name.trim());
+    setSelectedProduct(product);
     const payload: InventoryCreateRequest = {
-      name,
+      product_id: product.id,
       household_category_id: category,
       quantity,
       unit,
@@ -65,10 +81,10 @@ export default function AddInventory({
       notes: notes || undefined,
     };
 
-    try {
       await createInventoryItem(homeId, payload);
       setResult(`Successfully added "${name}"!`);
       setName("");
+      setSelectedProduct(null);
       setQuantity(1);
       setUnit("pcs");
       setExpiryDate("");
@@ -144,7 +160,9 @@ export default function AddInventory({
           </label>
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); setSelectedProduct(null); }}
+            maxLength={100}
+            disabled={loading}
             required
             style={{
               width: "100%",
@@ -153,6 +171,18 @@ export default function AddInventory({
               border: "1px solid #d1d5db",
             }}
           />
+          {products.length > 0 && !selectedProduct && (
+            <label>Choose an existing product
+              <select value="" onChange={e => {
+                const product = products.find(p => p.id === e.target.value);
+                if (product) { setSelectedProduct(product); setName(product.name); }
+              }} disabled={loading}>
+                <option value="">Select a product</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          )}
+          <p>{selectedProduct ? "Using the selected product." : "Adding this item will create a new product unless you select an existing one."}</p>
         </div>
 
         <div

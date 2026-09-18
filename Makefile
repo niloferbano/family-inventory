@@ -10,7 +10,7 @@ FRONTEND_DIR = frontend
 	run up down logs restart \
 	db-reset db-create db-drop db-migrate db-upgrade db-downgrade db-current db-history \
 	worker inventory-expiry-job \
-	test test-verbose lint format type-check clean prod help install create-admin
+	test test-verbose lint format type-check install-hooks clean prod help install create-admin
 
 # ---------- APP ----------
 run:
@@ -94,6 +94,10 @@ format:
 
 type-check:
 	$(POETRY) run mypy .
+
+install-hooks:
+	chmod +x .githooks/pre-commit
+	git config --local core.hooksPath .githooks
 
 # ---------- MAINTENANCE ----------
 clean:

@@ -6,15 +6,6 @@ from app.core.database.exceptions import (
 )
 
 
-class InventoryItemNameConflict(DomainConflictError):
-    def __init__(self, names: list[str]):
-        super().__init__(
-            code=ErrorCode.INVENTORY_ITEM_NAME_CONFLICT,
-            message="One or more inventory items already exist in this home",
-            details={"names": names},
-        )
-
-
 class InventoryAccessDenied(DomainPermissionError):
     def __init__(self, home_id: str):
         super().__init__(

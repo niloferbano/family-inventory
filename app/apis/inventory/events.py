@@ -54,7 +54,7 @@ class InventoryEventFactory:
                 event_id=event_id,
                 home_id=item.home_id,
                 item_id=item.id,
-                item_name=item.name,
+                item_name=item.product.name,
                 expiry_date=item.expiry_date,
                 days_left=(item.expiry_date - today).days,
             )
@@ -74,7 +74,7 @@ class InventoryEventFactory:
                 event_id=event_id,
                 home_id=item.home_id,
                 item_id=item.id,
-                item_name=item.name,
+                item_name=item.product.name,
                 expiry_date=item.expiry_date,
             )
             return EventEnvelope(

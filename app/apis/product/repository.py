@@ -24,6 +24,17 @@ class ProductRepository:
         await self.session.refresh(product)
         return product
 
+    async def get_many(
+        self, product_ids: set[ProductId], *, include_inactive: bool = False
+    ) -> list[Product]:
+        """Bulk existence check, e.g. validating a batch of InventoryItem writes."""
+        if not product_ids:
+            return []
+        stmt = sa.select(Product).where(Product.id.in_(product_ids))
+        if not include_inactive:
+            stmt = stmt.where(Product.is_active.is_(True))
+        return list((await self.session.execute(stmt)).scalars().all())
+
     async def get_by_id(
         self, product_id: ProductId, *, include_inactive: bool = False
     ) -> Product | None:

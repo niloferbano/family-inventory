@@ -11,7 +11,7 @@ export async function listInventoryCategories(homeId: string): Promise<Household
 }
 
 export interface InventoryCreateRequest {
-  name: string;
+  product_id: string;
   household_category_id: string;
   quantity: number;
   unit: string;
@@ -20,6 +20,7 @@ export interface InventoryCreateRequest {
 }
 
 export interface InventoryItem {
+  product_id: string;
   id: string;
   name: string;
   household_category_id: string;
@@ -31,7 +32,7 @@ export interface InventoryItem {
 }
 
 export interface InventoryUpdateRequest {
-  name?: string;
+  product_id?: string;
   household_category_id?: string;
   quantity?: number;
   unit?: string;
@@ -116,4 +117,20 @@ export async function deleteInventoryItem(
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
+}
+
+export interface Product { id: string; name: string; }
+export async function searchProducts(name: string): Promise<Product[]> {
+  const token = getToken();
+  return handleResponse<Product[]>(await fetch(`${API_BASE}/products?q=${encodeURIComponent(name)}`, {
+    headers: { ...(token ? { Authorization: `bearer ${token}` } : {}) },
+  }));
+}
+export async function createProduct(name: string): Promise<Product> {
+  const token = getToken();
+  return handleResponse<Product>(await fetch(`${API_BASE}/products`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `bearer ${token}` } : {}) },
+    body: JSON.stringify({ name }),
+  }));
 }

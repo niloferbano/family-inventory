@@ -33,25 +33,22 @@ class InventoryItem(SQLBase, TimeStampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    # Nullable during the Product/StockBatch rollout (issue #40/#43):
-    # existing rows have no product yet. ON DELETE RESTRICT because Product
-    # is a shared/global catalog — deleting one must not silently orphan or
-    # cascade-wipe another home's inventory history.
-    product_id: Mapped[ProductId | None] = mapped_column(
+    # Product is now the sole source of a product's name (issue #48):
+    # every row must reference one. RESTRICT because Product is a
+    # shared/global catalog -- deleting one must not silently orphan or
+    # cascade-wipe another home's inventory history. Multiple InventoryItems
+    # (in the same or different homes) may reference the same Product.
+    product_id: Mapped[ProductId] = mapped_column(
         ForeignKey("inventory_products.id", ondelete="RESTRICT"),
-        nullable=True,
+        nullable=False,
         index=True,  # supports "which homes stock this product" lookups
     )
-    product: Mapped[Product | None] = relationship("Product", lazy="selectin")
+    product: Mapped[Product] = relationship("Product", lazy="selectin")
 
-    # Additive, same pattern as product_id: category (the fixed enum) stays
-    # for backward compatibility. ON DELETE SET NULL (not RESTRICT) because
-    # a HouseholdCategory is one home's own label — deleting it should just
-    # uncategorize the item, not block the delete or affect other homes.
-    # Now the single source of truth for an item's category (issue #43
-    # follow-up): the old fixed InventoryCategory enum is gone. RESTRICT
-    # because the column is required -- a category in use can't be deleted
-    # out from under items that reference it.
+    # Single source of truth for an item's category (issue #43 follow-up):
+    # the old fixed InventoryCategory enum is gone. RESTRICT because the
+    # column is required -- a category in use can't be deleted out from
+    # under items that reference it.
     household_category_id: Mapped[HouseholdCategoryId] = mapped_column(
         ForeignKey("household_categories.id", ondelete="RESTRICT"),
         nullable=False,
@@ -61,7 +58,6 @@ class InventoryItem(SQLBase, TimeStampMixin):
         lazy="selectin",
     )
 
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit: Mapped[str] = mapped_column(String(30), default="pcs")
 
@@ -69,11 +65,6 @@ class InventoryItem(SQLBase, TimeStampMixin):
     notes: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "home_id",
-            "name",
-            name="uq_inventory_home_name",
-        ),
         Index(
             "ix_inventory_home_created_at",
             "home_id",

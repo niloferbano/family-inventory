@@ -7,6 +7,7 @@ from app.apis.homes.models import Home
 from app.apis.homeuser.models import HomeUser, UserType
 from app.apis.household_categories.models import HouseholdCategory
 from app.apis.inventory.models import InventoryItem
+from app.apis.product.models import Product
 from app.apis.users.models import User
 
 
@@ -24,6 +25,13 @@ async def _add_category(db_session, home_id, name: str) -> HouseholdCategory:
     return category
 
 
+async def _add_product(db_session, name: str) -> Product:
+    product = Product(name=name)
+    db_session.add(product)
+    await db_session.flush()
+    return product
+
+
 @pytest.mark.asyncio
 async def test_owner_adds_single_item(client, db_session, auth_headers):
     home = Home(name="Kitchen Home")
@@ -34,11 +42,12 @@ async def test_owner_adds_single_item(client, db_session, auth_headers):
         HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
     )
     kitchen = await _add_category(db_session, home.id, "Kitchen")
+    milk = await _add_product(db_session, "Milk")
     await db_session.commit()
 
     payload = [
         {
-            "name": "Milk",
+            "product_id": str(milk.id),
             "household_category_id": str(kitchen.id),
             "quantity": 2,
             "unit": "liters",
@@ -53,7 +62,7 @@ async def test_owner_adds_single_item(client, db_session, auth_headers):
     assert res.status_code == 200
     body = res.json()
     assert isinstance(body, list)
-    assert body[0]["name"] == "Milk"
+    assert body[0]["product_id"] == str(milk.id)
     assert body[0]["household_category_id"] == str(kitchen.id)
     assert body[0]["quantity"] == 2
 
@@ -69,16 +78,18 @@ async def test_owner_adds_multiple_items(client, db_session, auth_headers):
     )
     bathroom = await _add_category(db_session, home.id, "Bathroom")
     cleaning = await _add_category(db_session, home.id, "Cleaning")
+    soap = await _add_product(db_session, "Soap")
+    detergent = await _add_product(db_session, "Detergent")
     await db_session.commit()
 
     payload = [
         {
-            "name": "Soap",
+            "product_id": str(soap.id),
             "household_category_id": str(bathroom.id),
             "quantity": 3,
         },
         {
-            "name": "Detergent",
+            "product_id": str(detergent.id),
             "household_category_id": str(cleaning.id),
             "quantity": 1,
         },
@@ -93,12 +104,16 @@ async def test_owner_adds_multiple_items(client, db_session, auth_headers):
     assert res.status_code == 200
     items = res.json()
     assert len(items) == 2
-    assert {i["name"] for i in items} == {"Soap", "Detergent"}
+    assert {i["product_id"] for i in items} == {str(soap.id), str(detergent.id)}
 
 
 @pytest.mark.asyncio
-async def test_duplicate_name_returns_conflict(client, db_session, auth_headers):
-    home = Home(name="Conflict Home")
+async def test_add_items_with_unknown_product_returns_error(
+    client, db_session, auth_headers
+):
+    from uuid import uuid4
+
+    home = Home(name="Unknown Product Home")
     db_session.add(home)
     await db_session.flush()
     auth_user_id = await _get_auth_user_id(db_session)
@@ -109,26 +124,22 @@ async def test_duplicate_name_returns_conflict(client, db_session, auth_headers)
     await db_session.commit()
 
     payload = [
-        {"name": "Milk", "household_category_id": str(kitchen.id), "quantity": 1}
+        {
+            "product_id": str(uuid4()),
+            "household_category_id": str(kitchen.id),
+            "quantity": 1,
+        }
     ]
 
-    first = await client.post(
-        f"/inventory/{home.id}",
-        json=payload,
-        headers=auth_headers,
-    )
-    assert first.status_code == 200
-
-    conflict = await client.post(
+    res = await client.post(
         f"/inventory/{home.id}",
         json=payload,
         headers=auth_headers,
     )
 
-    assert conflict.status_code == 409
-    body = conflict.json()
-    assert body["error"] == "INVENTORY_ITEM_NAME_CONFLICT"
-    assert "Milk" in body["details"]["names"]
+    assert res.status_code == 404
+    body = res.json()
+    assert body["error"] == "PRODUCT_NOT_FOUND"
 
 
 @pytest.mark.asyncio
@@ -141,13 +152,14 @@ async def test_non_owner_cannot_add_items(client, db_session, auth_headers):
         HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.RESIDENCE)
     )
     bathroom = await _add_category(db_session, home.id, "Bathroom")
+    shampoo = await _add_product(db_session, "Shampoo")
     await db_session.commit()
 
     res = await client.post(
         f"/inventory/{home.id}",
         json=[
             {
-                "name": "Shampoo",
+                "product_id": str(shampoo.id),
                 "household_category_id": str(bathroom.id),
                 "quantity": 1,
             }
@@ -170,6 +182,8 @@ async def test_filter_expired_items(client, db_session, auth_headers):
         HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
     )
     kitchen = await _add_category(db_session, home.id, "Kitchen")
+    old_bread = await _add_product(db_session, "Old Bread")
+    fresh_milk = await _add_product(db_session, "Fresh Milk")
 
     today = date.today()
     expired_date = today - timedelta(days=2)
@@ -179,14 +193,14 @@ async def test_filter_expired_items(client, db_session, auth_headers):
         InventoryItem(
             home_id=home.id,
             created_by=auth_user_id,
-            name="Old Bread",
+            product_id=old_bread.id,
             household_category_id=kitchen.id,
             expiry_date=expired_date,
         ),
         InventoryItem(
             home_id=home.id,
             created_by=auth_user_id,
-            name="Fresh Milk",
+            product_id=fresh_milk.id,
             household_category_id=kitchen.id,
             expiry_date=future_date,
         ),
@@ -203,7 +217,7 @@ async def test_filter_expired_items(client, db_session, auth_headers):
     assert res.status_code == 200
     results = res.json()["results"]
     assert len(results) == 1
-    assert results[0]["name"] == "Old Bread"
+    assert results[0]["product_id"] == str(old_bread.id)
 
 
 @pytest.mark.asyncio
@@ -216,6 +230,8 @@ async def test_filter_expiring_soon_items(client, db_session, auth_headers):
         HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
     )
     other = await _add_category(db_session, home.id, "Other")
+    soon_expiry = await _add_product(db_session, "Soon Expiry")
+    much_later = await _add_product(db_session, "Much Later")
 
     today = date.today()
     soon = today + timedelta(days=2)
@@ -226,14 +242,14 @@ async def test_filter_expiring_soon_items(client, db_session, auth_headers):
             InventoryItem(
                 home_id=home.id,
                 created_by=auth_user_id,
-                name="Soon Expiry",
+                product_id=soon_expiry.id,
                 household_category_id=other.id,
                 expiry_date=soon,
             ),
             InventoryItem(
                 home_id=home.id,
                 created_by=auth_user_id,
-                name="Much Later",
+                product_id=much_later.id,
                 household_category_id=other.id,
                 expiry_date=later,
             ),
@@ -248,7 +264,7 @@ async def test_filter_expiring_soon_items(client, db_session, auth_headers):
 
     assert res.status_code == 200
     results = res.json()["results"]
-    assert [item["name"] for item in results] == ["Soon Expiry"]
+    assert [item["product_id"] for item in results] == [str(soon_expiry.id)]
 
 
 @pytest.mark.asyncio
@@ -263,25 +279,28 @@ async def test_filter_by_multiple_categories(client, db_session, auth_headers):
     bathroom = await _add_category(db_session, home.id, "Bathroom")
     cleaning = await _add_category(db_session, home.id, "Cleaning")
     kitchen = await _add_category(db_session, home.id, "Kitchen")
+    shampoo = await _add_product(db_session, "Shampoo")
+    detergent = await _add_product(db_session, "Detergent")
+    rice = await _add_product(db_session, "Rice")
 
     db_session.add_all(
         [
             InventoryItem(
                 home_id=home.id,
                 created_by=auth_user_id,
-                name="Shampoo",
+                product_id=shampoo.id,
                 household_category_id=bathroom.id,
             ),
             InventoryItem(
                 home_id=home.id,
                 created_by=auth_user_id,
-                name="Detergent",
+                product_id=detergent.id,
                 household_category_id=cleaning.id,
             ),
             InventoryItem(
                 home_id=home.id,
                 created_by=auth_user_id,
-                name="Rice",
+                product_id=rice.id,
                 household_category_id=kitchen.id,
             ),
         ]
@@ -295,8 +314,8 @@ async def test_filter_by_multiple_categories(client, db_session, auth_headers):
     )
 
     assert res.status_code == 200
-    names = {item["name"] for item in res.json()["results"]}
-    assert names == {"Shampoo", "Detergent"}
+    product_ids = {item["product_id"] for item in res.json()["results"]}
+    assert product_ids == {str(shampoo.id), str(detergent.id)}
 
 
 @pytest.mark.asyncio
@@ -309,11 +328,12 @@ async def test_owner_can_update_item(client, db_session, auth_headers):
         HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
     )
     kitchen = await _add_category(db_session, home.id, "Kitchen")
+    rice = await _add_product(db_session, "Rice")
 
     item = InventoryItem(
         home_id=home.id,
         created_by=auth_user_id,
-        name="Rice",
+        product_id=rice.id,
         household_category_id=kitchen.id,
         quantity=1,
     )
@@ -333,6 +353,43 @@ async def test_owner_can_update_item(client, db_session, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_update_item_with_unknown_product_returns_error(
+    client, db_session, auth_headers
+):
+    from uuid import uuid4
+
+    home = Home(name="Update Unknown Product Home")
+    db_session.add(home)
+    await db_session.flush()
+    auth_user_id = await _get_auth_user_id(db_session)
+    db_session.add(
+        HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
+    )
+    kitchen = await _add_category(db_session, home.id, "Kitchen")
+    rice = await _add_product(db_session, "Rice")
+
+    item = InventoryItem(
+        home_id=home.id,
+        created_by=auth_user_id,
+        product_id=rice.id,
+        household_category_id=kitchen.id,
+        quantity=1,
+    )
+    db_session.add(item)
+    await db_session.commit()
+
+    res = await client.patch(
+        f"/inventory/{home.id}/{item.id}",
+        json={"product_id": str(uuid4())},
+        headers=auth_headers,
+    )
+
+    assert res.status_code == 404
+    body = res.json()
+    assert body["error"] == "PRODUCT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
 async def test_owner_can_delete_item(client, db_session, auth_headers):
     home = Home(name="Delete Inventory Home")
     db_session.add(home)
@@ -342,11 +399,12 @@ async def test_owner_can_delete_item(client, db_session, auth_headers):
         HomeUser(user_id=auth_user_id, home_id=home.id, user_type=UserType.OWNER)
     )
     other = await _add_category(db_session, home.id, "Other")
+    old_item = await _add_product(db_session, "Old Item")
 
     item = InventoryItem(
         home_id=home.id,
         created_by=auth_user_id,
-        name="Old Item",
+        product_id=old_item.id,
         household_category_id=other.id,
         quantity=1,
     )
@@ -380,6 +438,8 @@ async def test_category_choices_and_cross_home_validation(
     db_session.add(HomeUser(user_id=user_id, home_id=home.id, user_type=UserType.OWNER))
     own = await _add_category(db_session, home.id, "Kitchen")
     foreign = await _add_category(db_session, other.id, "Private category")
+    valid_product = await _add_product(db_session, "Valid")
+    invalid_product = await _add_product(db_session, "Invalid")
     await db_session.commit()
 
     choices = await client.get(f"/inventory/{home.id}/categories", headers=auth_headers)
@@ -393,8 +453,14 @@ async def test_category_choices_and_cross_home_validation(
             f"/inventory/{home.id}",
             headers=auth_headers,
             json=[
-                {"name": "Valid", "household_category_id": str(own.id)},
-                {"name": "Invalid", "household_category_id": str(invalid)},
+                {
+                    "product_id": str(valid_product.id),
+                    "household_category_id": str(own.id),
+                },
+                {
+                    "product_id": str(invalid_product.id),
+                    "household_category_id": str(invalid),
+                },
             ],
         )
         assert response.status_code == 422
@@ -408,7 +474,7 @@ async def test_category_choices_and_cross_home_validation(
         f"/inventory/{home.id}",
         headers=auth_headers,
         json=[
-            {"name": "Valid", "household_category_id": str(own.id)},
+            {"product_id": str(valid_product.id), "household_category_id": str(own.id)},
         ],
     )
     assert response.status_code == 200
@@ -440,14 +506,19 @@ async def test_category_deletion_races_inventory_write(
     db_session.add(HomeUser(user_id=user_id, home_id=home.id, user_type=UserType.OWNER))
     original = await _add_category(db_session, home.id, "Original")
     target = await _add_category(db_session, home.id, "Target")
+    existing_product = await _add_product(db_session, "Existing")
+    new_product = await _add_product(db_session, "New")
     item = InventoryItem(
-        home_id=home.id, name="Existing", household_category_id=original.id
+        home_id=home.id,
+        product_id=existing_product.id,
+        household_category_id=original.id,
     )
     db_session.add(item)
     await db_session.commit()
     target_id = target.id
     original_id = original.id
     item_id = item.id
+    new_product_id = new_product.id
     lock = HouseholdCategoryRepository.lock_for_inventory
     deletion_attempted = False
 
@@ -480,7 +551,10 @@ async def test_category_deletion_races_inventory_write(
             f"/inventory/{home.id}",
             headers=auth_headers,
             json=[
-                {"name": "New", "household_category_id": str(target_id)},
+                {
+                    "product_id": str(new_product_id),
+                    "household_category_id": str(target_id),
+                },
             ],
         )
     else:
@@ -498,7 +572,8 @@ async def test_category_deletion_races_inventory_write(
         )
         created = await session.scalar(
             select(InventoryItem).where(
-                InventoryItem.home_id == home.id, InventoryItem.name == "New"
+                InventoryItem.home_id == home.id,
+                InventoryItem.product_id == new_product_id,
             )
         )
         assert (created is not None) == (operation == "create" and not delete_first)
