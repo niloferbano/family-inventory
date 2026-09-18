@@ -10,6 +10,7 @@ from app.apis.homeuser import models as _homeuser_models  # noqa: F401
 from app.apis.inventory import models as _inventory_models  # noqa: F401
 from app.apis.notifications import \
     models as _notifications_models  # noqa: F401
+from app.apis.product import models as _product_models  # noqa: F401
 from app.apis.users import models as _users_models  # noqa: F401
 from app.core.configs.config import settings
 from app.core.database.base import SQLBase
