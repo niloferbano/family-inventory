@@ -10,6 +10,7 @@ UserId = NewType("UserId", PythonUUID)
 InventoryId = NewType("InventoryId", PythonUUID)
 NotificationEventId = NewType("NotificationEventId", PythonUUID)
 InventoryExpiryAlertId = NewType("InventoryExpiryAlertId", PythonUUID)
+ProductId = NewType("ProductId", PythonUUID)
 
 
 class SQLBase(DeclarativeBase):
