@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   createInventoryItem,
-  Product, searchProducts, createProduct,
+  Product, ProductCandidate, ProductDetails, lookupProduct, searchProducts, createProduct,
   HouseholdCategory,
   listInventoryCategories,
   InventoryCreateRequest,
@@ -21,6 +21,11 @@ export default function AddInventory({
 }) {
   const [name, setName] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [barcode, setBarcode] = useState("");
+  const [lookupPending, setLookupPending] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState("");
+  const [candidate, setCandidate] = useState<ProductCandidate | null>(null);
+  const [reviewedDetails, setReviewedDetails] = useState<ProductDetails | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -56,9 +61,37 @@ export default function AddInventory({
     return () => { cancelled = true; };
   }, [homeId]);
 
+  async function handleLookup() {
+    if (lookupPending || loading || !barcode.trim()) return;
+    setLookupPending(true);
+    setLookupMessage("");
+    setError(null);
+    setSelectedProduct(null);
+    setReviewedDetails(null);
+    setCandidate(null);
+    try {
+      const result = await lookupProduct(barcode.trim());
+      if (result.source === "local" && result.product) {
+        setSelectedProduct(result.product);
+        setName(result.product.name);
+        setLookupMessage("Product found in the catalog.");
+      } else if (result.source === "external" && result.candidate) {
+        setCandidate(result.candidate);
+        setLookupMessage("Review this match before using it.");
+      } else {
+        setLookupMessage(result.source === "provider_unavailable"
+          ? "Product lookup is temporarily unavailable. Enter the product manually."
+          : "No product found. Enter the product manually.");
+      }
+    } catch (err) {
+      if (String(err).includes("401")) { clearToken(); onLogout(); }
+      else setError(err instanceof Error ? err.message : "Lookup failed. Try again or enter the product manually.");
+    } finally { setLookupPending(false); }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading || categoriesLoading || !name.trim() || !categories.some(c => c.id === category)) return;
+    if (loading || lookupPending || candidate || categoriesLoading || !name.trim() || !categories.some(c => c.id === category)) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -70,7 +103,7 @@ export default function AddInventory({
     }
 
     try {
-    const product = selectedProduct ?? await createProduct(name.trim());
+    const product = selectedProduct ?? await createProduct({ ...reviewedDetails, name: name.trim(), barcode: barcode.trim() || undefined });
     setSelectedProduct(product);
     const payload: InventoryCreateRequest = {
       product_id: product.id,
@@ -85,6 +118,9 @@ export default function AddInventory({
       setResult(`Successfully added "${name}"!`);
       setName("");
       setSelectedProduct(null);
+      setBarcode("");
+      setReviewedDetails(null);
+      setLookupMessage("");
       setQuantity(1);
       setUnit("pcs");
       setExpiryDate("");
@@ -162,7 +198,7 @@ export default function AddInventory({
             value={name}
             onChange={(e) => { setName(e.target.value); setSelectedProduct(null); }}
             maxLength={100}
-            disabled={loading}
+            disabled={loading || lookupPending}
             required
             style={{
               width: "100%",
@@ -175,14 +211,47 @@ export default function AddInventory({
             <label>Choose an existing product
               <select value="" onChange={e => {
                 const product = products.find(p => p.id === e.target.value);
-                if (product) { setSelectedProduct(product); setName(product.name); }
-              }} disabled={loading}>
+                if (product) { setSelectedProduct(product); setName(product.name); setBarcode(product.barcode ?? ""); setCandidate(null); setReviewedDetails(null); setLookupMessage(""); }
+              }} disabled={loading || lookupPending}>
                 <option value="">Select a product</option>
                 {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </label>
           )}
           <p>{selectedProduct ? "Using the selected product." : "Adding this item will create a new product unless you select an existing one."}</p>
+        </div>
+
+        <div>
+          <label htmlFor="inventory-barcode">Barcode (optional)</label>
+          <input id="inventory-barcode" value={barcode} maxLength={64}
+            disabled={loading || lookupPending}
+            onChange={e => {
+              setBarcode(e.target.value); setCandidate(null); setSelectedProduct(null);
+              setReviewedDetails(null); setLookupMessage("");
+            }} />
+          <button type="button" onClick={handleLookup}
+            disabled={loading || lookupPending || !barcode.trim()}>
+            {lookupPending ? "Looking up…" : "Look up product"}
+          </button>
+          {lookupMessage && <p role="status">{lookupMessage}</p>}
+          {candidate && (
+            <section aria-label="Product match">
+              <p><strong>{candidate.name}</strong></p>
+              {candidate.brand && <p>Brand: {candidate.brand}</p>}
+              {candidate.external_category && <p>Catalog category: {candidate.external_category}</p>}
+              <p>Source: {candidate.source}</p>
+              <button type="button" onClick={() => {
+                setName(candidate.name.slice(0, 100)); setBarcode(candidate.barcode);
+                setReviewedDetails({
+                  brand: candidate.brand?.slice(0, 100),
+                  external_category: candidate.external_category?.slice(0, 100),
+                  image_url: candidate.image_url?.slice(0, 500), name: candidate.name.slice(0, 100),
+                });
+                setCandidate(null); setLookupMessage("Match selected. Review the name and add the item to save it.");
+              }}>Use this product</button>
+              <button type="button" onClick={() => { setCandidate(null); setLookupMessage("Enter the product manually."); }}>Enter manually</button>
+            </section>
+          )}
         </div>
 
         <div
@@ -328,7 +397,7 @@ export default function AddInventory({
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
             type="submit"
-            disabled={loading || categoriesLoading || !category}
+            disabled={loading || lookupPending || !!candidate || categoriesLoading || !category}
             style={{
               flex: 2,
               background: "#2563eb",

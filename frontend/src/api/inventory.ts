@@ -119,18 +119,43 @@ export async function deleteInventoryItem(
   }
 }
 
-export interface Product { id: string; name: string; }
+export interface ProductDetails {
+  name: string;
+  barcode?: string | null;
+  brand?: string | null;
+  external_category?: string | null;
+  image_url?: string | null;
+}
+export interface Product extends ProductDetails { id: string; }
+export interface ProductCandidate extends ProductDetails { source: string; barcode: string; }
+export interface ProductLookupResponse {
+  source: "local" | "external" | "not_found" | "provider_unavailable";
+  product?: Product | null;
+  candidate?: ProductCandidate | null;
+}
+export async function lookupProduct(barcode: string): Promise<ProductLookupResponse> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/products/lookup/${encodeURIComponent(barcode)}`, {
+    headers: { ...(token ? { Authorization: `bearer ${token}` } : {}) },
+  });
+  if (response.status === 404) {
+    const body = await response.json().catch(() => null);
+    if (body?.source === "not_found") return body;
+    throw new Error("Product lookup is unavailable. You can enter the product manually.");
+  }
+  return handleResponse<ProductLookupResponse>(response);
+}
 export async function searchProducts(name: string): Promise<Product[]> {
   const token = getToken();
   return handleResponse<Product[]>(await fetch(`${API_BASE}/products?q=${encodeURIComponent(name)}`, {
     headers: { ...(token ? { Authorization: `bearer ${token}` } : {}) },
   }));
 }
-export async function createProduct(name: string): Promise<Product> {
+export async function createProduct(details: string | ProductDetails): Promise<Product> {
   const token = getToken();
   return handleResponse<Product>(await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `bearer ${token}` } : {}) },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(typeof details === "string" ? { name: details } : details),
   }));
 }
