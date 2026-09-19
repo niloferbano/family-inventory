@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  createInventoryItem,
+  createInventoryItem, createHouseholdCategory,
   Product, ProductCandidate, ProductDetails, lookupProduct, searchProducts, createProduct,
   HouseholdCategory,
   listInventoryCategories,
@@ -45,6 +45,31 @@ export default function AddInventory({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryPending, setCategoryPending] = useState(false);
+  const [categoryError, setCategoryError] = useState("");
+  async function saveCategory() {
+    if (categoryPending) return;
+    const normalized = categoryName.trim();
+    if (!normalized || normalized.length > 60) {
+      setCategoryError("Enter a category name between 1 and 60 characters.");
+      return;
+    }
+    setCategoryPending(true);
+    setCategoryError("");
+    try {
+      const created = await createHouseholdCategory(homeId, normalized);
+      setCategories(previous => [...previous.filter(c => c.id !== created.id), created]
+        .sort((a, b) => a.name.localeCompare(b.name)));
+      setCategory(created.id);
+      setCategoryName("");
+      setShowCategoryForm(false);
+    } catch (err) {
+      setCategoryError(err instanceof Error ? err.message : "Unable to create category.");
+    } finally { setCategoryPending(false); }
+  }
 
   const [categories, setCategories] = useState<HouseholdCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -91,7 +116,7 @@ export default function AddInventory({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading || lookupPending || candidate || categoriesLoading || !name.trim() || !categories.some(c => c.id === category)) return;
+    if (categoryPending || showCategoryForm || loading || lookupPending || candidate || categoriesLoading || !name.trim() || !categories.some(c => c.id === category)) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -267,6 +292,9 @@ export default function AddInventory({
               }}
             >
               Category
+              <button type="button" disabled={loading || categoriesLoading || categoryPending}
+                onClick={() => { setShowCategoryForm(true); setCategoryError(""); }}
+                style={{ marginLeft: 8 }}>Create category</button>
             </label>
             <select
               required
@@ -288,6 +316,20 @@ export default function AddInventory({
                 </option>
               ))}
             </select>
+            {showCategoryForm && (
+              <div role="group" aria-label="Create household category">
+                <label htmlFor="new-category-name">New category name</label>
+                <input id="new-category-name" value={categoryName} disabled={categoryPending}
+                  aria-describedby={categoryError ? "category-error" : undefined}
+                  onChange={e => setCategoryName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void saveCategory(); } }} />
+                <button type="button" disabled={categoryPending} onClick={saveCategory}>
+                  {categoryPending ? "Creating…" : "Save category"}
+                </button>
+                <button type="button" disabled={categoryPending} onClick={() => setShowCategoryForm(false)}>Cancel</button>
+                {categoryError && <p id="category-error" role="alert">{categoryError}</p>}
+              </div>
+            )}
           </div>
 
           <div>
@@ -397,7 +439,7 @@ export default function AddInventory({
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
             type="submit"
-            disabled={loading || lookupPending || !!candidate || categoriesLoading || !category}
+            disabled={categoryPending || showCategoryForm || loading || lookupPending || !!candidate || categoriesLoading || !category}
             style={{
               flex: 2,
               background: "#2563eb",

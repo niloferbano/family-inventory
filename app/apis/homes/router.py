@@ -7,6 +7,11 @@ from app.apis.homes.schema import (
     PaginatedAdminHomesResponse,
 )
 from app.apis.homes.service import HomeService
+from app.apis.household_categories.schemas import (
+    HouseholdCategoryCreate,
+    HouseholdCategoryRead,
+)
+from app.apis.household_categories.service import HouseholdCategoryService
 from app.core.database.base import HomeId
 from app.core.database.exceptions import DomainPermissionError
 from app.core.database.pagination import PaginationParams, get_pagination
@@ -15,6 +20,21 @@ from app.iam.dependencies import get_current_user
 from app.iam.permissions import PermissionsValidator
 
 router = APIRouter(prefix="/homes", tags=["homes"])
+
+
+@router.post(
+    "/{home_id}/categories", response_model=HouseholdCategoryRead, status_code=201
+)
+async def create_household_category(
+    home_id: HomeId,
+    payload: HouseholdCategoryCreate,
+    db_manager=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    async with db_manager.begin() as session:
+        return await HouseholdCategoryService(session, current_user).create_category(
+            home_id=home_id, data=payload
+        )
 
 
 @router.post("/", response_model=HomeRead)
