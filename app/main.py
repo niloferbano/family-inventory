@@ -12,6 +12,7 @@ from app.apis.homeuser.router import router as home_user_router
 from app.apis.inventory.router import router as inventory_router
 from app.apis.notifications.brokers import RabbitMQBroker
 from app.apis.notifications.router import router as notification_router
+from app.apis.product.router import close_catalog_client
 from app.apis.product.router import router as products_router
 from app.apis.users.router import router as users_router
 from app.core.configs.config import settings
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     yield
     await rabbit_publisher.close()
     await app.state.redis.close()
+    await close_catalog_client()
 
 
 def _silence_websocket_logs() -> None:

@@ -2,6 +2,7 @@ from pydantic import Field, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.configs.cache_config import CacheConfiguration
+from app.core.configs.product_catalog_config import ProductCatalogSettings
 from app.core.configs.smtp_config import SMTPSettings
 
 
@@ -19,6 +20,8 @@ class Settings(BaseSettings):
 
     SMTP: SMTPSettings = SMTPSettings()
     PUBLIC_BASE_URL: HttpUrl = HttpUrl("http://localhost")
+
+    PRODUCT_CATALOG: ProductCatalogSettings = ProductCatalogSettings()
 
     # JWT
     JWT_SECRET_KEY: str = "notset"
