@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from uvicorn.config import LOGGING_CONFIG
 
 from app.apis.homes.router import router as homes_router
+from app.apis.homes.settings import router as home_settings_router
 from app.apis.homeuser.router import router as home_user_router
 from app.apis.inventory.router import router as inventory_router
 from app.apis.notifications.brokers import RabbitMQBroker
@@ -98,6 +99,7 @@ API_PREFIX = "/api/v1"
 app.include_router(router=users_router, prefix=API_PREFIX)
 app.include_router(router=products_router, prefix=API_PREFIX)
 app.include_router(router=homes_router, prefix=API_PREFIX)
+app.include_router(router=home_settings_router, prefix=API_PREFIX)
 app.include_router(router=home_user_router, prefix=API_PREFIX)
 app.include_router(router=inventory_router, prefix=API_PREFIX)
 app.include_router(router=notification_router, prefix=API_PREFIX)

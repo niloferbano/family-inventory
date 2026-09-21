@@ -23,7 +23,7 @@ import {
 } from "../api/inventory";
 import AddInventory from "./AddInventory";
 import NotificationBell from "./NotificationBell";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 const isUnauthorized = (err: unknown) => {
   const message = String(err ?? "");
@@ -365,6 +365,7 @@ export default function InventoryHome({ onLogout }: { onLogout: () => void }) {
               ? `Home: ${selectedHome.name}`
               : "Select a home to view inventory."}
           </p>
+          {homeId && <Link to={`/homes/${homeId}/settings`}>Home settings</Link>}
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import ActivateAccount from "./components/ActivateAccount";
 import PasswordReset from "./components/PasswordReset";
 import Login from "./components/Login";
 import InventoryHome from "./components/InventoryHome";
+import HomeSettings from "./components/HomeSettings";
 import { getToken, clearToken } from "./api/auth";
 import NotificationBell from "./components/NotificationBell";
 import NotificationSubscriptions from "./components/NotificationSubscriptions";
@@ -91,6 +92,7 @@ export default function App() {
 
       <main>
         <Routes>
+          <Route path="/homes/:homeId/settings" element={authed ? <HomeSettings /> : <Navigate to="/login" replace />} />
           <Route
             path="/register"
             element={authed ? <Navigate to="/" replace /> : <Register />}
