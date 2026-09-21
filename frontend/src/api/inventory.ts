@@ -159,3 +159,20 @@ export async function createProduct(details: string | ProductDetails): Promise<P
     body: JSON.stringify(typeof details === "string" ? { name: details } : details),
   }));
 }
+
+export async function createHouseholdCategory(homeId: string, name: string): Promise<HouseholdCategory> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/homes/${homeId}/categories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `bearer ${token}` } : {}) },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const detail = Array.isArray(body.detail)
+      ? body.detail.map((issue: { msg: string }) => issue.msg).join("; ")
+      : body.detail;
+    throw new Error(body.message || detail || "Unable to create category. Please try again.");
+  }
+  return response.json();
+}
