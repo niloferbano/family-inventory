@@ -4,6 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Family Inventory</title>
+
+    <!-- PWA: manifest link + service worker registration are injected
+         automatically by vite-plugin-pwa (see vite.config.mjs). These tags
+         cover what it doesn't: iOS's "Add to Home Screen" behavior. -->
+    <meta name="theme-color" content="#1e6b7a" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Inventory" />
     <style>
       :root {
         color-scheme: light;
