@@ -1,3 +1,36 @@
+## Agent Development Workflow
+
+Before implementing changes:
+
+1. Inspect the relevant existing implementation.
+2. Identify affected modules, API contracts, and dependencies.
+3. Identify security, database, and concurrency implications.
+4. Propose an implementation plan for non-trivial changes.
+5. Identify required tests and acceptance criteria.
+
+During implementation:
+
+1. Follow existing architectural patterns.
+2. Keep changes limited to the approved scope.
+3. Avoid unrelated refactoring.
+4. Update relevant tests and documentation.
+
+After implementation:
+
+1. Run relevant tests.
+2. Run linting and type checks.
+3. Review changes for security and concurrency issues.
+4. Report remaining risks and unverified assumptions.
+
+
+## Approval Boundaries
+
+- Require approval before adding dependencies.
+- Require approval before destructive database changes.
+- Require approval before modifying authentication or authorization rules.
+- Never access production credentials.
+- Never deploy to production without explicit approval.
+
 # Repository Guidelines
 
 See [docs/architecture.md](docs/architecture.md) for the application's components, data flows, and deployment architecture.
@@ -36,6 +69,13 @@ Use Python 3.12, matching CI, and Poetry for backend dependencies.
 - TypeScript: match existing formatting, generally two-space indentation; PascalCase component filenames, camelCase functions. Before adding a new `frontend/src/api/*.ts` call, check the actual FastAPI route signature — e.g. a `list[UUID] | None = Query(default=None)` filter needs repeated query params (`?key=a&key=b`), not a comma-joined string.
 
 ## Testing Guidelines
+Run focused tests for modified functionality.
+Run broader regression tests when appropriate.
+Never claim tests passed without executing them.
+Report skipped tests and unavailable dependencies.
+Review authorization boundaries and concurrency risks.
+Report any unresolved issues before declaring a task complete.
+
 Use pytest, pytest-asyncio, and HTTPX fixtures; name files `test_*.py`. Add regression tests alongside the relevant domain tests. Configure `TEST_DATABASE_URL` for a dedicated PostgreSQL database and Redis where needed. Set `REQUIRE_TEST_DATABASE=true` to fail instead of skipping when PostgreSQL is unavailable. CI collects branch coverage for `app` and `family_cli`; no minimum percentage is configured. No frontend test script is currently defined.
 The current HTTPX `ASGITransport` test fixture does not run application lifespan. Tests that need startup resources must initialize them explicitly or run lifespan, and must close any resources they create. For tests using lazy module-level async clients, use fixtures to close/reset those clients between tests to prevent shared state and connections from leaking across tests.
 
